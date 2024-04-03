@@ -1,0 +1,123 @@
+/**
+ * Description : This Handler will be executed for UpdateoptyCampaign logic.
+ * History     :
+ * [09.DEC.2020] Manasa Gandham    - Code creation
+ */
+Public With Sharing Class leadTriggerGenericHelper{
+    
+    public static Boolean isExecuted= false; //GTT-2792 
+
+    Public Static Void onAfterUpdate(List<Lead> newLeadList, Map<Id, Lead> oldLeadMap) {    
+        Map<Id, Id> LeadMap = New Map<Id, Id>();
+        List<ID> LeadIDs = New List<ID>();
+        List<ID> OpportunityIDs = New List<ID>();
+        Map<Id, Id> ConvOppCampMap = New Map<Id, Id>();
+        list<FeedItem> insertFeedItems= new list<FeedItem>(); //GTT-2792        
+       
+        for (Lead ld:newLeadList){    
+            OpportunityIDs.add(ld.ConvertedOpportunityId);
+            LeadIDs.add(ld.Id);            
+            LeadMap.put(ld.Id,ld.ConvertedOpportunityId);
+            //GTT-2792 CODE STARTS HERE 
+            Lead ol= oldLeadMap.get(ld.Id);
+            if( !isExecuted && ld.Description != ol.Description ){
+                system.debug(' HOW MANY TIMES CALLED ');
+                isExecuted= true;
+                FeedItem singleFI= new FeedItem();
+                singleFI.ParentId= ld.Id;
+                singleFI.Body= 'Changed Description from '+ ol.description +' to '+ ld.description ;
+                singleFI.Type= 'TextPost';
+                singleFI.NetworkScope= 'AllNetworks';
+                insertFeedItems.add(singleFI);
+            } 
+            //GTT-2792 CODE ENDS HERE 
+        }
+        if(insertFeedItems.size() >0){
+            Database.insert(insertFeedItems, False);
+        }
+  
+        if(Test.isRunningTest()){
+            Opportunity opp= new Opportunity();
+            opp=[SELECT Id from Opportunity limit 1];
+            OpportunityIDs.add(opp.id);
+        }
+      
+        if(LeadIDs!= null && !LeadIDs.isEmpty()){
+
+            List<CampaignInfluence> optycm = new List<CampaignInfluence>(); 
+            trConstants__c ModelId = trConstants__c.getValues('ModelId'); 
+
+            for(CampaignMember c :[SELECT CampaignId, LeadId,Lead.ConvertedOpportunityId FROM CampaignMember where LeadId in :LeadIDs ORDER BY createddate ASC] ){
+  
+                if(!ConvOppCampMap.containsKey(c.Lead.ConvertedOpportunityId)){      
+                    ConvOppCampMap.put(c.Lead.ConvertedOpportunityId,c.CampaignId);  
+                }
+                CampaignInfluence CO = new CampaignInfluence();
+                CO.CampaignId = c.CampaignId;
+                CO.OpportunityId = c.Lead.ConvertedOpportunityId;
+    
+                if(ModelId.Value__c != null)
+                CO.ModelId = ModelId.Value__c;
+            
+                optycm.add(CO);
+  
+              }
+  
+  // Code Introduced as part of  CR 26825 to make oppotunity currency same as account currency on convert
+  List<Opportunity> OpportunityLst = new List<Opportunity>();  
+   if(OpportunityIDs!= null && !OpportunityIDs.isEmpty())
+        {
+            //GTT-1980 CODE STARTS HERE
+            SET<String> profileIds= new SET<String>();
+            List<Lead_Opportunity_Profiles__c> lead_Oppty_Profiles= Lead_Opportunity_Profiles__c.getall().values();
+            for(Lead_Opportunity_Profiles__c prof:lead_Oppty_Profiles){
+                profileIds.add(prof.Profile_Id__c);             
+            }       
+            //GTT-1980 CODE ENDS HERE
+          for(Opportunity opp : [select Id,lead_qualification_information__c,accountid,CurrencyIsoCode,Account.CurrencyIsoCode,EAI_ByPass__c, 
+                          Lead_Description__c, Description,tfcrmType__c,CreatedDate,Account.CreatedDate, RecordTypeId, StageName from Opportunity where Id in: OpportunityIDs])
+          {
+              //GTT-1980 CODE STARTS HERE
+              if(profileIds.contains( UserInfo.GetProfileId())){                  
+                  Id leadRecordTypeId= Schema.SObjectType.Opportunity.getRecordTypeInfosByName().get(Label.Sales_Lead_Opportunity).getRecordTypeId();
+                  opp.RecordtypeId= leadRecordTypeId; 
+                  opp.StageName= Label.Opportunity_Stage_0;                 
+              }
+              //GTT-1980 CODE STARTS HERE
+               opp.CurrencyIsoCode = opp.Account.CurrencyIsoCode; //Set account Currency as opportunity currency
+               //opp.Description= opp.Lead_Description__c;
+
+               opp.CampaignId = ConvOppCampMap.get(opp.Id); 
+               
+               //GTT-1589
+               Decimal milsecs = opp.CreatedDate.getTime() - opp.Account.CreatedDate.getTime();
+               opp.tfcrmType__c = milsecs <= TRUST_Constants__c.getOrgDefaults().UpdateOptyCampaign_Difference__c? Label.OpptyType_NewAccount : Label.OpptyType_NewProduct ;
+               //description update
+              opp.description = opp.lead_qualification_information__c != null ?opp.lead_qualification_information__c: opp.Lead_Description__c; 
+               
+               //opp.EAI_ByPass__c = false; //Set this value back to false ( default value ) So that EAI messages are generated for updates on opportunity.
+               OpportunityLst.add(opp);
+          }
+        if(OpportunityLst!= null && !OpportunityLst.isEmpty())
+        {
+            OpportunityTriggerGenericHelper.isLeadConverted = true;
+            update OpportunityLst; 
+        }
+    }
+ 
+        try{
+        
+        if(optycm!=null && !optycm.isEmpty()){
+        insert optycm;
+        }
+        
+        }
+        catch (Exception e){ 
+            system.debug('Error occured while insert opty campaign :'+ e);  
+        }
+   
+ }
+  
+    }
+
+}
