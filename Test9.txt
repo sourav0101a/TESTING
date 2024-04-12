@@ -1,0 +1,2785 @@
+/**************************************************************************************************************************************
+Class Name : OpportunityTriggerGenericHelper
+Description : This class will handle the logic for all the opportunity trigger whcih are common across projects
+-----------------------------------------------------------------------------------------------------
+Date             Author            Version            Comments
+2/12/2016        Deepika M         1.0                Initial Development
+***************************************************************************************************************************************/
+public class OpportunityTriggerGenericHelper{
+
+    //logged in user profilename
+    public static String userProfileName = TriggerUtility.getUserRecord().Profile.Name;
+    //public static boolean vmcValue = TriggerUtility.getUserRecord().View_Marketing_Campaigns__c ;
+    public static String ownerid = '';
+    public List<Opportunity_Validations__mdt> Opportunityvalidatnmdt=OpportunityTriggerUtility.opportunityvalidationmtd();
+    public static boolean accountOwnerNotified = false;
+    Public static boolean stopRecursion=false; //added as a part of TSV-235  
+    Public static boolean stopRecursionCSM = false; //added as a part of TSV-1455
+    Public static boolean stopDocuSignRecursion=false; //added as a part of GTT-872   
+    Public static boolean bypassMSCValidation = false; // used to bypass the Main sales contact validation when it is set to true
+    public static boolean isLeadConverted = false;
+    public static boolean isfeedcreated = false; //Added for GTT-3065
+    public static boolean isRecCallout = false; // Added for 1697
+    /***********************************************************************************************
+Functionalities Implemented:
+1.Ravi      :   Updating pricebook for products when opportunity created by profile user(InsertPriceBookTrigger)
+2.Ravi      :   Updation of Legal entity account on opportunity being created (tr_LegalEntityCheckOnAccount)
+3.Ranjitha  :   Updation of 'Supress order Form modified by'Field on opportunity if it is true(triggerGenesisOpportunity)
+4.Neenu     :   Updating the Opportunity fields based on various conditions by populating values
+from DirectPool and the AssociatedOpportunities.(setPoolTeamLeader)
+Lead Source Most Recent and Secondary Lead Source Most Recent fields on Opportunity cannot be
+changed once they are autopopulated after clicking on Genesis Free Trial oppty
+5. Ramya    :   Update opportuntiy fields -Tr vertical,Competitor Name,Competitor,pricebook,Account Country
+Throw error if opportuntiy name already exists(triggerOpportunity)
+****************************************************************************************************/
+    public static void genericBeforeInsert(List <SObject > newItems) {
+
+        System.debug('L3 Testing 2700360 OpportunityTriggerGenericHelper genericBeforeInsert Start');
+        //Generic variable for New List of opportunities
+        List < Opportunity > currentOppList = (List<Opportunity>) newItems ;
+
+        Map<Integer,string> newOppNameAccountIdList = new Map<Integer,string> ();
+
+        //ravi --
+        //current user profile id
+        //string currentUserProfileId = TriggerUtility.getUserRecord().ProfileId;
+
+        //list of opportunities to be updated (legal entity on opportunity)
+        List<opportunity> oppLegalEntityList = new List<Opportunity>();
+        //set of account ids related to opportunities
+        set<Id> oppAccountIdSet = new Set<Id>();
+        //--ravi
+
+        //Initialize variables
+        List<Opportunity> lstOppWithForAssociatedOpps = new List<Opportunity>();
+        Set<Id> setParentOpp = new Set<Id>();
+        List < Opportunity > associatedOppList = new List < Opportunity > ();
+        Set < String > associatedOppSet = new Set < String > ();
+        Set <String> dupOppSetNewOpps = new Set<String>();
+        Map<Integer,string> newOppNameAccountIdMAp = new Map<Integer,string> ();
+        Map<String,Id> newOppNameMap = new Map<String,Id>();
+        List<Opportunity> newAssociatedOppList=new List<Opportunity>();
+        //Fecth standard pricebook id
+        Id standardPriceBookId = OpportunityTriggerUtility.getPricebookId().get('Standard Price Book');
+        Integer counter=0;
+        set<Id> accountIdSet = new Set<Id>();
+        opportunity oppValueForAssociated;
+        Map<ID,ID> OPPPartnernameID = new  Map<ID,ID>();//Added as part of GTT-2520
+        string CustomerSuccessId = system.label.Customer_Success_Profile;//Added as part of GTT-5016
+        //CSMRoleMandatory(newItems , 'beforeInsert');// commented <PS>
+        //Iterate through each opportunity
+        System.debug('L3 Testing 2700360 currentOppList Start' +currentOppList);
+        for(Opportunity opp: currentOppList){
+        System.debug('L3 Testing 2700360 currentOppList Start inside for loop');    
+            //GTT-5313 starts
+            if(opp.StageName != null)
+            {
+                opp.Stage_Last_Modified_By__c = Userinfo.getName();
+            }
+        	//GTT-5313 Ends
+            
+            //GTT-2520 STARTS HERE
+            if((opp.Partner_Name__c != null) && (opp.Partner_Role__c == '' || opp.Partner_Role__c == null)){   
+                 OPPPartnernameID.put(opp.id, opp.Partner_Name__c);
+                      }           
+            //GTT-2520 ENDS HERE
+            oppValueForAssociated = opp;
+            OwnerId = opp.OwnerId;
+             
+            //GTT-2519 STARTS HERE (Set checkbox to true)
+            if((opp.Partner_Role__c != '' || opp.Partner_Role__c != null) && opp.Partner_Role__c == Label.Redistribution && opp.Redistribution__c != true){
+                
+                opp.Redistribution__c = true;
+            }
+            
+            //(Set Partner Type to Redistribution)
+            if(opp.Redistribution__c == true && (opp.Partner_Role__c == null || opp.Partner_Role__c == '')){
+                
+                opp.Partner_Role__c = 'Redistribution';
+            }
+            //GTT-2519 ENDS HERE
+            
+            //ramya---(triggerOpportunity)
+            if(!opp.Access_Statement__c) {
+                //getting all account id's from opportunity, where tocAccount_Country__c is updated form account's shipping country
+                accountIdSet.add(opp.AccountId);
+                System.debug('L3 Testing 2700360 updateOpportunityFields inside for loop'); 
+           
+                //call the method to update the opportunity fields
+                
+                updateOpportunityFields(opp);
+
+                //update opp pricebook id to Standard,if not of Conference oppty recordtype
+                //if (opp.Pricebook2Id ==null && opp.RecordTypeId != Static_Values__c.getAll().get('Opportunity.Conference Opportunity').Value__c)
+                if (opp.Pricebook2Id ==null){ //TSV-137 removed && condition for Connference Opportunity record type as record type is deleted
+                     opp.Pricebook2Id = standardPriceBookId;
+                } 
+                //update Oldowner and CustOpptyOwner
+                opp.OldOwner__c = opp.OwnerId ;
+                opp.CustOpptyOwner__c = opp.OwnerId ;
+                //check if opp Name  already exist for account,if so throw error(compares names from newly loaded oppties)
+                if(opp.AccountId != null){
+                    if(dupOppSetNewOpps.contains(opp.Name+ '/' + opp.AccountId) && userinfo.getName() != 'Siebel EAI' ){
+                        opp.Name.addError(Label.OpportunityNameError);
+                        newOppNameAccountIdMap.put(counter, 'Error' + counter+ '/ ' + opp.Name+ '/' + opp.AccountId);
+                        
+                    }else{
+                        dupOppSetNewOpps.add(opp.Name+ '/' + opp.AccountId);
+                        newOppNameAccountIdList.put(counter, opp.Name+ '/' + opp.AccountId);
+                        newOppNameMap.put(opp.Name,opp.AccountId);
+                    }
+                }
+
+                //update SiebelOwner
+                if(userinfo.getName() == 'Siebel EAI'){
+                    opp.SiebelFirstOwner__c =  opp.OwnerId;
+                } //--ramya
+
+            }
+
+            //Check if the Opportunity is a Trialopp and the Opportunity's AssociatedId has any value.
+            if(opp.Trial_Opportunity__c && (opp.Associated_Id__c!= null && opp.Associated_Id__c!='')) {
+                lstOppWithForAssociatedOpps.add(opp);//List to hold current opportunities
+                setParentOpp.add(opp.Associated_Id__c);//Set to hold the associatedIds
+            } //--Neenu
+
+            //if opportunity  market type is reuters and account is not null, then add it to opplist
+            //trigger : (tr_LegalEntityCheckOnAccount)
+            if(userProfileName != NULL){
+                //check if the logged in user's profile is not among system admin, api,helpdesk and integration profiles
+                if(userProfileName != 'System Administrator'
+                   && (userProfileName != 'API'|| opp.Self_Serve_Order__c)
+                   && userProfileName != 'TF Help Desk'
+                   && (userProfileName != 'Integration' || opp.Self_Serve_Order__c)){
+//NER-263
+                       if(opp.tfcrmMkt__c=='Reuters' && opp.AccountId != null && !opp.Trial_Opportunity__c ){
+
+                           oppLegalEntityList.add(opp);
+                           oppAccountIdSet.add(opp.AccountId);
+                       }
+                   }
+            }//--ravi
+            //Added by Ranjitha
+            // Update the'Supress order Form Modified by' Field if it is True(triggerGenesisOpportunity)
+            if(opp.Suppress_Order_Form__c){
+                opp.Suppress_Order_Form_Modified_By__c = UserInfo.getUserName()+'('+System.now()+')';
+            } //Ranjitha
+            counter++; //--ramya
+
+      
+            
+            if(opp.Suppress_Approvals__c){
+                
+                opp.Suppress_Approval_Modified_by_User__c = UserInfo.getUserName()+'('+System.now()+')';
+                if(opp.Suppress_Approval_Justification__c=='' || opp.Suppress_Approval_Justification__c==null)      
+                {       
+                    opp.addError('Please enter justification for suppressing approvals');       
+                }       
+            }
+            
+            
+            
+
+            // GTT-1443 && GTT-1834 CODE STARTS HERE
+            // GTT-4583 CODE STARTS HERE
+            opp.Probability =  
+            opp.Commit_to_Forecast__c && (opp.StageName == Label.Opportunity_Stage_5 || opp.StageName== Label.Opportunity_Stage_4 || opp.StageName== Label.Opportunity_Stage_3 || opp.StageName== Label.Opportunity_Stage_2 || opp.StageName== Label.Opportunity_Stage_1) && Static_Values__c.getValues('ST4OR5_Prob_WithCommit') != null ?
+            Integer.valueOf( Static_Values__c.getValues('ST4OR5_Prob_WithCommit').Value__c) : 
+            /* Commented as part of GTT-2608 (opp.tfcrmType__c == 'Pre-pipeline' && opp.StageName == Label.Opportunity_Stage_1 && Static_Values__c.getValues('ST1_Prob_With_Pipeline') != null) ? 
+            Integer.valueOf( Static_Values__c.getValues('ST1_Prob_With_Pipeline').Value__c): */
+            opp.Probability;
+            // GTT-4583 CODE ENDS HERE
+            // GTT-1443 && GTT-1834 CODE ENDS HERE
+            //GTT-5016 Changes Start
+            if(Userinfo.getProfileId() == CustomerSuccessId && (!opp.isFromLead__c))    
+            {   
+                 opp.Lead_Source_Most_Recent__c='CSM'; 
+                opp.Lead_Referred_By1__c= Userinfo.getuserid();
+            } 
+            string recTypeName = Schema.SObjectType.Opportunity.getRecordTypeInfosById().get(opp.recordtypeid).getname();
+            if(Userinfo.getProfileId() == CustomerSuccessId && opp.recordtypeid == System.Label.CancelRecordtype)              
+            {                    
+             opp.addError(system.label.CSM_Error_Meesage);
+            }
+            /* if(userProfileName == 'RFT Sales - Opp Gen' && opp.recordtypeid == System.Label.CancelRecordtype)              
+            {                    
+             opp.addError(system.label.RFT_Sales_Opp_Gen_Error_Message);
+            } Commenting this as a part of GTT-5323*/
+            if(((userProfileName == 'RFT Sales - Opp Gen' && !opp.isConverted__c) || ( Userinfo.getProfileId() == CustomerSuccessId && !opp.isFromLead__c && opp.recordtypeid == System.Label.OpportunityRecordId)) && !opp.Trial_Opportunity__c)
+            {
+                opp.recordtypeid= system.label.Lead_Opportunity_Recordtype;
+                opp.StageName= system.label.Opportunity_Stage_0;
+            }
+            
+            if(opp.isFromLead__c && userProfileName != 'Global Business Opps' && userProfileName != 'Global Business Ops + Edit' && userProfileName != 'RFT Sales' && userProfileName != 'TR Transaction Sales User' &&  userProfileName != 'RFT Sales - Opp Gen'){
+                opp.StageName= system.label.Opportunity_Stage_1;  
+                opp.tfcrmType__c= 'New Account';          
+            }
+            //GTT-5016 Changes End
+        }//End of For loop
+             //GTT-2520 STARTS HERE
+           if(OPPPartnernameID.size()>0 && OPPPartnernameID!=null){
+           Map<Id, String> Opptyval=new Map<Id, String>();
+           Opptyval=OpportunityTriggerUtility.getPartnerRole(OPPPartnernameID);
+           for(Opportunity opp: currentOppList)
+           Opp.Partner_Role__c=Opptyval.get(Opp.Id); 
+              }          
+            //GTT-2520 ENDS HERE
+        //ramya--
+        //call updateOpportunityAccountCountry to update Opportunity Account Country with Account ShippingCountry(triggerOpportunity)
+        if(currentOppList.size() >0 && accountIdSet.size() >0){
+            updateOpportunityAccountCountry(currentOppList,accountIdSet);
+        }
+        //--ramya
+
+        //--Neenu(setPoolTeamLeader)
+        if(lstOppWithForAssociatedOpps != null && lstOppWithForAssociatedOpps.size() > 0){
+            PopulateAssociatedOppValuestoOpportunity(lstOppWithForAssociatedOpps,setParentOpp);
+        }
+        //--Neenu
+
+        //ramya--(triggerOpportunity)
+        //Check if opp name already exists for the account if so throw error(compare with the existing oppties within the acc)
+        if(newOppNameMap.size() > 0){
+            Map<String,Opportunity> existingOppNameMap = OpportunityTriggerUtility.getExistingOppNameMap(newOppNameMap);
+            for(Integer key : newOppNameAccountIdList.keyset()){
+                if(existingOppNameMap.get(newOppNameAccountIdList.get(key)) != null && userinfo.getName() != 'Siebel EAI' ){
+                    Trigger.new[key].addError(Label.OpportunityNameError);
+                }
+            }
+        }
+
+        //--ravi---
+        //if list is not empty , then call the method
+        if(!oppLegalEntityList.isEmpty()){
+            //call for the method to perform the legal entity account update on Opportunity
+            performLegalEntity(oppLegalEntityList,oppAccountIdSet);
+        } //--ravi
+
+        
+
+        //added validation rule as a part of story CRMU-174
+        LeadCategoryofInterestValidation(currentOppList);
+
+        // validation for tocPreventMarketChange 
+        // added validation rule as a part of story CRMU-174
+        tocPreventMarketChange(currentOppList , true);
+        System.debug('L3 Testing 2700360 Insert End');
+        
+
+    }//End of before insert
+
+    /***********************************************************************************************************
+Functionalities Implemented:
+1.Ravi  :   Updation of Legal entity account on opportunity being updated(tr_LegalEntityCheckOnAccount)
+2.Ranjitha : Updation the Fields of 'strategic genesis opportunity' based on Opportuniy Record (updateStrategy)
+3.Sonal :    Update ultimate parent opportunity for child opportunities in pipeline Opportunity.(UpdateAssociatedOppty)
+4.Ramya :    Update Opportuntiy currency with account currency(triggerOpportunity)
+Update opportuntiy fields -Tr vertical,Competitor Name,Competitor,pricebook,Account Country
+************************************************************************************************************/
+    public static  Set<Id> OppIdSet = new Set<Id>();
+    //List of SAP Strategy opportunity
+       Public static List<SAP_Strategic_Opportunity__c> statOppty = new List<SAP_Strategic_Opportunity__c>();
+    //Generic Before Update Method
+     public static String ValidationExclude = TRUST_Constants__c.getOrgDefaults().Validation_Exclusion__c;
+    public static void genericBeforeUpdate(Map<Id, SObject> newItems, Map<Id, SObject> oldItems){
+        System.debug('L3 Testing 2700360 genericBeforeUpdate inside');
+        //contains list of opportunity triggered on before update
+        // Boolean GSAMCalUpdate = false;
+        List<Opportunity> NewOppItems = (List<opportunity>)newItems.values();
+        //list of opportunity to be updated
+        List<opportunity> oppLegalEntityList = new List<Opportunity>();
+        //will contain true /false base on field comparision
+        Map<String,Boolean> mapFieldChangeStatus = new Map<String,Boolean>();
+        Map<String,Boolean> mapFieldsIdChanged  = new Map<String,Boolean>();
+        //logged in user profile id
+        string currentUserProfileId = userinfo.getProfileId();
+        //set of account ids related to opportunities
+        set<Id> oppAccountIdSet = new Set<Id>();
+        Set<Id> opportunityIdSet = new Set<Id>();
+        Boolean cjrUpdateRunOppty=CJRUpdate.runOppty();
+        Map<ID, ID> mapUltimateOportunity = new Map<ID, ID>();
+        Map<ID, ID> oldUPAndNewUPOpportunity = new Map<ID,ID>();
+        //List of opportunities not in Genesis/GRC
+        List<opportunity> oppGenList = new List<Opportunity>();
+        // Oppty that satisfies Prevent Market Change Validation
+        List<opportunity> tocPreventMarketChangeOpptyList = new List<Opportunity>();
+        
+        //Set of oopty ID's not in Genesis/GRC
+        Set<id> oppIdList = new Set<id>();
+        //List of fields to be compared
+        List<string> oppFieldList = new List<string>{'AccountId','StageName','Associated_Opportunity__c','tocMonthlyRecurring__c','tfcrmOneTimeRevenue__c','OwnerId','isClosed','Commit_to_Forecast__c','tfcrmType__c'}; // Added 2 values as part of GTT-405 && GTT-1834
+            //Set to hold Account id's
+            Set<ID> accId = new Set<ID>();
+        //Old opportuntiy Map
+        Map<Id,Opportunity>oldOpptyMap = new Map<Id,Opportunity>();
+        Map<ID,ID> OPPPartnernameID = new  Map<ID,ID>();//Added as part of GTT-2520
+        oldOpptyMap=(Map<Id,opportunity>)oldItems;
+        Set<ID> accountIdSet =new Set <ID>();
+        list<Opportunity> lstNewOpptyAccountIDChanged = new list<Opportunity>(); //Added by Deepika
+       if(!stopRecursionCSM ) {
+            stopRecursionCSM = true;
+            System.debug('L3 Testing 2700360 genericBeforeUpdate stopRecursionCSM');
+            CSMRoleMandatory(NewOppItems, oldOpptyMap,'beforeupdate');
+        }   
+           if(!stopRecursion)
+           {
+             stopRecursion=true;
+             
+             validatePrimaryContacRoleOnOpty(newItems,NewOppItems,oldOpptyMap);// introduced as a part of TSV-235 on May-16-2019 commented due to UAT regression
+          }
+         MAP<String, currencyType> currencytypemap = new MAP<String, currencyType>();
+                         currencytypemap = GRCManageAssetsUtility.queryAllcurrencyType();
+        for(Opportunity oppNew : NewOppItems){
+           
+            //old details of the current opportunity
+            opportunity oldOpportunity = (opportunity)oldItems.get(oppNew.Id);
+            //GTT-2520 STARTS HERE
+            if/*(!test.isRunningTest() ||*/((oppNew.Partner_Name__c != null) && (oppNew.Partner_Name__c != oldOpportunity.Partner_Name__c ) && (oppNew.Partner_Role__c == '' || oppNew.Partner_Role__c == null)){   
+                                              
+                 OPPPartnernameID.put(oppNew.id, oppNew.Partner_Name__c);
+            }           
+            //GTT-2520 ENDS HERE
+            
+            //GTT-5313 starts
+            if(oppNew.StageName != oldOpportunity.StageName)
+            {
+                oppNew.Stage_Last_Modified_By__c = Userinfo.getName();
+            }
+        	//GTT-5313 Ends
+            
+            
+            //GTT-2519 STARTS HERE (Set checkbox to true)
+            if((oppNew.Partner_Role__c != '' || oppNew.Partner_Role__c != null) && oppNew.Partner_Role__c == Label.Redistribution && 
+            (oldOpportunity.Partner_Role__c != oppNew.Partner_Role__c ) && oppNew.Redistribution__c != true){
+                
+                oppNew.Redistribution__c = true;
+            }
+    else if( oppNew.Partner_Role__c!=oldOpportunity.Partner_Role__c  && oldOpportunity.Partner_Role__c  == 'Redistribution' && oppNew.Redistribution__c== true ){
+             oppNew.Redistribution__c=False;
+             }
+            //(Set Partner Type to Redistribution)
+            if(oppNew.Redistribution__c == true && (oppNew.Partner_Role__c == null || oppNew.Partner_Role__c == '') && (oldOpportunity.Redistribution__c != oppNew.Redistribution__c ) ){
+                
+                oppNew.Partner_Role__c = 'Redistribution';
+            }
+            //GTT-2519 ENDS HERE
+  else if(oppNew.Redistribution__C == false && oldOpportunity.Redistribution__c == true && (oppNew.Partner_Role__c != '' || oppNew.Partner_Role__c != null) && oppNew.Partner_Role__c == 'Redistribution') {
+             oppNew.Partner_Role__c='';
+             }
+             if(oppNew.Suppress_Approvals__c==true && (oppNew.Suppress_Approval_Justification__c=='' || oppNew.Suppress_Approval_Justification__c==null))       
+                {       
+                    oppNew.addError('Please enter justification for suppressing approvals');        
+                }
+             //GTT-5016 Changes Start
+              if(Label.SAM_Admin_Profiles.contains(userProfileName) && (oldOpportunity != null && oppNew != null && oldOpportunity.ownerid != oppNew.OwnerId) && oppNew.Owners_Role__c.contains('CSM'))
+            {                
+                oppNew.addError(system.label.Non_CSM_Error_Message);             
+            }
+            //GTT-5016 Changes End
+            //sfcf- 1472 
+           decimal monthlyrevenue = 0;
+            decimal onetimerevenue = 0;
+            if(currencytypemap.get(oppNew.Currency__c)!=null && oppNew.tocGSCSMonthlyRecurring__c  != null &&  oppNew.tocGSCSMonthlyRecurring__c  != 0){
+                monthlyrevenue = GRCManageAssetsUtility.convertToUSDCurrency(currencytypemap.get(oppNew.Currency__c), oppNew.tocGSCSMonthlyRecurring__c);
+            }
+           if(currencytypemap.get(oppNew.Currency__c)!=null && oppNew.tocGSCSOneTimeRevenue__c  != null &&  oppNew.tocGSCSOneTimeRevenue__c  != 0){
+                onetimerevenue = GRCManageAssetsUtility.convertToUSDCurrency(currencytypemap.get(oppNew.Currency__c), oppNew.tocGSCSOneTimeRevenue__c);
+            }
+           
+            If(oppNew.CSM_hand_off_notes__c == Label.CSM_hand_off_notes){
+            
+            }
+            If(oppNew.CSM_hand_off_notes__c != null){
+             if(oppNew.CSM_hand_off_notes__c.replace('\r','') == Label.CSM_hand_off_notes){
+            
+               }
+             }
+            
+           
+       String recordtypename = Schema.SObjectType.Opportunity.getRecordTypeInfosById().get(oppNew.recordtypeid).getname();
+             
+      if(ValidationExclude != null  ){  
+          if(ValidationExclude.split(',').contains(userProfileName) == false 
+                && oppNew.StageName != System.Label.Opportunity_Stage_1
+                && oppNew.StageName != System.Label.Opportunity_Stage_2 
+                && oppNew.StageName != System.Label.Opportunity_Stage_3 
+                && oppNew.StageName != System.Label.Opportunity_Stage_4 
+                && oppNew.StageName != System.Label.Opportunity_Stage_8 
+                && (monthlyRevenue > Decimal.ValueOf(Opportunity_Validations__mdt.getInstance('Mandate_CSM_Handoff_GTM_Revenue').Field_Value__c) ||
+               onetimerevenue > Decimal.ValueOf(Opportunity_Validations__mdt.getInstance('Mandate_CSM_Handoff_GTM_One_Time_Revenue').Field_Value__c)) &&
+                    recordtypename == 'Opportunity' && 
+                    (oppNew.Account_Coverage_Model__c!=null && 
+                     !(Opportunity_Validations__mdt.getInstance('Mandate_CSM_Handoff_Account_Coverage_Mod').Field_Value__c.split(',').contains(oppNew.Account_Coverage_Model__c))) &&
+                    (String.isBlank(oppNew.CSM_hand_off_notes__c) || oppNew.CSM_hand_off_notes__c.replace('\r','') == Label.CSM_hand_off_notes || oppNew.CSM_hand_off_notes__c == Label.CSM_hand_off_notes) &&
+                  (oppNew.SyncedQuoteId__c == oldOpportunity.SyncedQuoteId__c) &&
+                    (oppNew.tocGSCSOneTimeRevenue__c == oldOpportunity.tocGSCSOneTimeRevenue__c) && 
+                    (oppNew.tocGSCSMonthlyRecurring__c == oldOpportunity.tocGSCSMonthlyRecurring__c) &&
+                    (oppNew.CSM_Assigned__c == oldOpportunity.CSM_Assigned__c))
+             {
+                   
+                    oppNew.addError('CSM hand-off notes are required for this Opportunity');
+                         
+                 } 
+            }          
+          //sfcf- 1472 
+
+            //ramya--(triggerOpportunity)
+            mapFieldsIdChanged = TriggerUtility.isFieldChanged(oppNew,oldOpportunity,oppFieldList);
+            //Opportunity account is not null and account has been changed , then add it to Set
+            if(mapFieldsIdChanged.get('AccountId') && userinfo.getName() != 'Siebel EAI'
+               && !oppNew.trActiveQuoteInd__c && oppNew.StageName != Label.Opportunity_Stage_6
+               && oppNew.StageName != Label.Opportunity_Stage_7 && oppNew.StageName != Label.Opportunity_Stage_8){
+                   lstNewOpptyAccountIDChanged.add(oppNew);
+                   accountIdSet.add(oppNew.AccountId);//Add new oppty account id
+                   accountIdSet.add(oldOpportunity.AccountId);//Add old oppty account id
+               }
+            if(!oppNew.Access_Statement__c) {
+
+                //call the method to update the opportunity fields
+                updateOpportunityFields(oppNew);
+            }
+
+            /*Code started by sonal (UpdateAssociatedOppty)*/
+            if(cjrUpdateRunOppty){
+                //checking if the prior(Parent Opportunity) is not same as current(Parent Opportunity)
+                if(mapFieldsIdChanged.get('Associated_Opportunity__c')){
+                    opportunityIdSet.add(oppNew.id);//adding the current opportunity id in the set
+                    mapUltimateOportunity.put(oppNew.id,oldOpportunity.Ultimate_Parent_Oportunity__c);//adding the cuurent opportunity id, old Ultimate Parent Opportuntiy in map
+                    oldUPAndNewUPOpportunity.put(oldOpportunity.Ultimate_Parent_Oportunity__c ,oppNew.Ultimate_Parent_Opportunity__c);//adding the old Ultimate Parent Opportuntiy id, current Ultimate Parent Opportuntiy in map
+                }
+            }
+            /*Code ended by sonal*/
+            //Ranjitha--(updateStrategy)
+            //Check for the opportunities which are not Either Genesis OR GRC opportunities and take in a List
+            if(oppNew.genesis_flag__c != 'True' && !oppNew.GRC_Opportunity__c){
+                oppGenList.add(oppNew);
+                oppIdList.add(oppNew.Id);
+            }
+
+            //ravi--
+            //trigger : (tr_LegalEntityCheckOnAccount)
+            if(userProfileName != NULL){
+                //check if the logged in user's profile is not among system admin, api,helpdesk and integration profiles
+                if(userProfileName != 'System Administrator'
+                   && (userProfileName != 'API'|| oppNew.Self_Serve_Order__c)
+                   && userProfileName != 'TF Help Desk'
+                   && (userProfileName != 'Integration' || oppNew.Self_Serve_Order__c)){
+                       //check if opportunity market type is Reuters and access statement is true
+                       if(oppNew.tfcrmMkt__c=='Reuters'){
+                           //Opportunity account is not null and account has been changed , then add it to oppList
+                           if(oppNew.AccountId != NULL && mapFieldsIdChanged.get('AccountId') && !oppNew.Trial_Opportunity__c){
+                               oppLegalEntityList.add(oppNew);
+                               oppAccountIdSet.add(oppNew.AccountId);
+                           }
+                       }
+                   }
+            } // end of if(userProfileName != null )
+            // -- ravi
+
+      
+            
+            //GTT-405 Start
+            if(UserInfo.getName() != Label.InactiveAccountContactUser)
+            {
+            oppNew.Old_Owner_ID__c = null;
+            if(mapFieldsIdChanged.get('OwnerId') ||  (mapFieldsIdChanged.get('isClosed') && oppNew.isClosed)){
+                oppNew.Old_Owner_ID__c = oldOpportunity.OwnerId;
+            }
+            }
+            //GTT-405 End
+            //GTT-1454 && GTT-1834 CODE STARTS    
+            //GTT-4583 CODE STARTS        
+            oppNew.Commit_to_Forecast__c = mapFieldsIdChanged.get('StageName') && oppNew.StageName == Label.Opportunity_Stage_8 ? false : oppNew.Commit_to_Forecast__c;
+            oppNew.Probability= 
+                oppNew.Commit_to_Forecast__c && ( mapFieldsIdChanged.get('Commit_to_Forecast__c')|| mapFieldsIdChanged.get('StageName')) &&
+                (oppNew.StageName == Label.Opportunity_Stage_5 || oppNew.StageName== Label.Opportunity_Stage_4 || oppNew.StageName== Label.Opportunity_Stage_3
+                 || oppNew.StageName== Label.Opportunity_Stage_2 || oppNew.StageName== Label.Opportunity_Stage_1) && Static_Values__c.getValues('ST4OR5_Prob_WithCommit') != null ?
+                Integer.valueOf( Static_Values__c.getValues('ST4OR5_Prob_WithCommit').value__c) : !oppNew.Commit_to_Forecast__c && mapFieldsIdChanged.get('Commit_to_Forecast__c')
+                    && oppNew.StageName == Label.Opportunity_Stage_5 ? Integer.valueOf( Static_Values__c.getValues('ST5_Prob_WithoutCommit').Value__c) :
+            !oppNew.Commit_to_Forecast__c && mapFieldsIdChanged.get('Commit_to_Forecast__c') && oppNew.StageName == Label.Opportunity_Stage_4 ? 
+                                Integer.valueOf( Static_Values__c.getValues('ST4_Prob_WithoutCommit').Value__c) : 
+            !oppNew.Commit_to_Forecast__c && mapFieldsIdChanged.get('Commit_to_Forecast__c') && oppNew.StageName == Label.Opportunity_Stage_3 ?
+                Integer.valueOf( Static_Values__c.getValues('ST3_Prob_WithoutCommit').Value__c) :
+            !oppNew.Commit_to_Forecast__c && mapFieldsIdChanged.get('Commit_to_Forecast__c') && oppNew.StageName == Label.Opportunity_Stage_2 ?
+                Integer.valueOf( Static_Values__c.getValues('ST2_Prob_WithoutCommit').Value__c) :
+            !oppNew.Commit_to_Forecast__c && mapFieldsIdChanged.get('Commit_to_Forecast__c') && oppNew.StageName == Label.Opportunity_Stage_1 ?
+                Integer.valueOf( Static_Values__c.getValues('ST1_Prob_WithoutCommit').Value__c) : oppNew.Probability;
+            
+            /* Commented as part of GTT-2608 (oppNew.tfcrmType__c == 'Pre-pipeline' && oppNew.StageName == Label.Opportunity_Stage_1 && Static_Values__c.getValues('ST1_Prob_With_Pipeline') != null ) ? 
+                                Integer.valueOf( Static_Values__c.getValues('ST1_Prob_With_Pipeline').Value__c): */
+            //(mapFieldsIdChanged.get('tfcrmType__c') && oppNew.StageName == Label.Opportunity_Stage_1 /* GTT-2608 && oppNew.tfcrmType__c != 'Pre-pipeline' */ 
+            //&& Static_Values__c.getValues('ST1_Prob_WithOut_Pipeline') != null) ? 
+            //Integer.valueOf( Static_Values__c.getValues('ST1_Prob_WithOut_Pipeline').Value__c) : 
+            //oppNew.Probability;
+            //GTT-1454 && GTT-1834 CODE ENDS
+            //GTT-4583 CODE ENDS            
+            
+            // TO-DO : when market field gets changed we will call this tocPreventMarketChange method
+            // if market field changes .adding that opportunity to tocPreventMarketChangeOpptyList.
+            // added validation rule as a part of story CRMU-174
+            if(oldOpptyMap.get(oppNew.Id).tfcrmMkt__c != oppNew.tfcrmMkt__c)
+                tocPreventMarketChangeOpptyList.add(oppNew);
+        }//end of for
+         //GTT-2520 STARTS HERE
+           if(OPPPartnernameID.size()>0 && OPPPartnernameID!=null){
+           Map<Id, String> Opptyval=new Map<Id, String>();
+           Opptyval=OpportunityTriggerUtility.getPartnerRole(OPPPartnernameID);
+           System.debug('L3 Testing 2700360 Partner_Role__c For loop');
+           for(Opportunity opp: NewOppItems)
+           Opp.Partner_Role__c=Opptyval.get(Opp.Id); 
+               }      
+           System.debug('L3 Testing 2700360 OPPPartnernameID For loop');
+            //GTT-2520 ENDS HERE
+        //ramya--(triggerOpportunity)
+        //Call updateOppCurrency to update Opportunity Currency with Account currency
+        if(accountIdSet.size()>0){
+            System.debug('L3 Testing 2700360 lstNewOpptyAccountIDChanged');
+            updateOppCurrency(lstNewOpptyAccountIDChanged,accountIdSet,oldOpptyMap);
+        }//--ramya
+
+        //sonal--(UpdateAssociatedOppty)
+        if(oldUPAndNewUPOpportunity.size() >= 1) {
+            //opportunityPipelineUtility OportunityPipelineUtility = new opportunityPipelineUtility();
+            //OportunityPipelineUtility.processReparentList(mapUltimateOportunity,oldUPAndNewUPOpportunity);
+            System.debug('L3 Testing 2700360 processReparentList');
+            processReparentList(mapUltimateOportunity,oldUPAndNewUPOpportunity);
+        }//sonal
+
+        //ravi --(tr_LegalEntityCheckOnAccount)
+        if(!oppLegalEntityList.isEmpty()){
+            //call for the method to perform the legal entity update on Opportunity
+            performLegalEntity(oppLegalEntityList,oppAccountIdSet);
+        }   //--ravi
+
+        //Ranjitha(updateStrategy)
+        if(!oppGenList.isEmpty()){
+
+            //Query For SAP strategic opportunity Based on the ID's of opportunity
+            if(!oppIdList.isEmpty()&& OppIdSet!=oppIdList){
+                if(statOppty.isEmpty()){
+                System.debug('L3 Testing 2700360 OpportunityTriggerUtility');
+                statOppty = OpportunityTriggerUtility.getSAPStrategy(oppIdList);
+                }
+            }
+            //call for the method to perform Updation of Genesis strategy Object's fields
+            System.debug('L3 Testing 2700360 genStrategyOppUpdate');
+            genStrategyOppUpdate(oppGenList,statOppty,oldItems);
+        } //Ranjitha
+        
+ 
+        // TO-DO : when market field gets changed we will call this tocPreventMarketChange method
+        // added validation rule as a part of story CRMU-174
+        if(!tocPreventMarketChangeOpptyList.isEmpty())
+            System.debug('L3 Testing 2700360 tocPreventMarketChangeOpptyList');
+            tocPreventMarketChange(tocPreventMarketChangeOpptyList , false);
+    }
+          //System.debug('L3 Testing 2700360 End Changes');
+
+    /*******************************************************************************************************
+Functionalities Implemented:
+1.Ranjitha : Restricting the  TFintegration and users with System Admin profile from deleting Opportunity
+created by TF Integration(deleteOpp)
+*********************************************************************************************************/
+
+    //Generic Before Delete Method
+    public static void genericBeforeDelete(Map<Id,SObject> oldItems){
+         System.debug('L3 Testing 2700360 Delete Start');
+        // Used to check if user is TFinegration and System Admin profile prevent them from deleting the opportunity
+        for(Opportunity oppDelete:(List<Opportunity>)oldItems.values()){
+
+            //Check if the Opportunity is created by TF Integration User(deleteOpp)
+            if(oppDelete.CreatedById ==Label.UnicaDeleteId && oppDelete.Unica_ID__c!= '' && oppDelete.Unica_ID__c!= null){
+                String UserNames = Label.Delete_Record_Restriction; // Tf Integration User
+                String ProfileIds = Label.Delete_Record_Restriction_Profile; //System Admin Profile
+
+                // Check if the user trying to delete opportunity is not TFintegration user or User with system Admin profile
+                if (!UserNames.contains(UserInfo.getName()+';') && !ProfileIds.contains(UserInfo.getProfileId()+';')){
+
+                    oppDelete.addError(Label.Opportunity_deelete_error_message);
+                }
+            }
+        }
+        
+    }//End Of Generic Before delete
+
+
+    /*********************************************************************************************
+Functionalities Implemented:
+1.Ranjitha  : A method call for Updation of Quote Status Field based on conditions of opportunity Fields(triggerGenesisOpportunity)
+2.Srikanth  : When Opportunity Sales Stage changes to Opportunity_Stage_7, the Oppty Expected Revenue Date should get
+populated with the Bill Start Date of the QLI with Max recurring revenue(ExpectedRevSS7)
+3.Sonal : Update Ultimate_Parent_Opportunity__c,Net_GSAM_Reccurring_Calculation__c,Net_GSAM_One_Time_Calculation__c(UpdateNetGSAMForUltimateParentOpportunity)
+****************************************************************************************************/
+
+    public static void genericAfterUpdate(Map<Id,SObject> newItems, Map<Id,SObject> oldItems){
+        
+        System.debug('L3 Testing 2700360 genericAfterUpdate Start');
+        //Ranjitha--
+        //Id's of Opportunity to set Quote status to 'Expired'
+        set<id> setExpiredOppty = new set<id>();
+        //Id's of Opportunity to set Quote status to 'In Progress'
+        set<id> setInProgressOppty = new set<id>();
+        // combined set of ID's
+        set<id> setOpptyFinalSet = new set<id>(); //---Ranjitha
+        //type casting to map<id,opportunity>
+        Map<Id,Opportunity> oldItemsMap =  (Map<Id,Opportunity>)oldItems;
+        //triggeropportunity
+    List<Id> GSAMCalUpdateList = new List<Id>(); //sfcf-1412
+        Map<Id,Opportunity> opportunityChanged = new Map<Id,Opportunity>();
+        Map<Id, Opportunity> billingReportDateChangeMap = new Map<Id, Opportunity>();
+        Map<Id, Opportunity> accInputMapNew = new Map<Id, Opportunity>();
+        Map<Id, Opportunity> accInputMapOld = new Map<Id, Opportunity>();
+        Boolean executeStatements = false ;
+        Map<String, Opportunity> opportunityOwnerIdQueryMap = new Map<String, Opportunity>();
+      //  List<Opportunity> listofOpp =new List<Opportunity>(); //need to check
+        // Map of Oppty Id, and Max Recurring Revenue of its OLI (synched from QLI)
+        Map<Id, Decimal> OppRecurringRevMap = New Map<Id, Decimal>();
+        List<Opportunity> tempNewOptylist = (List<Opportunity>)newItems.values();
+        List<Opportunity> tempOldOptylist = (List<Opportunity>)oldItems.values();
+        /*Initialization starts--Sonal*/
+        Boolean cjrUpdateRunOnce=CJRUpdate.runOnce();
+       // Map<ID, account> mapParentAcc = new Map<ID, account>();
+       // Set<String> setAccIds= new Set<String>();
+        String ulitimateId;
+        Map<String,String> opportunityMap = new Map<String,String>();
+        set<String> setUltimateParent = new set<String>();
+        set<string> accountIdSet = new set <string>();
+        set<string> hierarchyAccount =new set<String>();
+        set<string> finalAccontIdSet = new set<string>();
+        set<String> setUltimateParentId = New set<String>();
+        Set<Id> accId = new Set<Id> ();
+       // List<Account> ultiAccountList =new List<Account>();
+        List<String> lstFields = New List<String>{'Ultimate_Parent_Opportunity__c','Associated_Opportunity__c','tocGSCSMonthlyRecurring__c',           'tocGSCSOneTimeRevenue__c','Trigger_Net_GSAM_Calculation__c','AccountId','OwnerId','StageName','isClosed','CampaignId','CIPS_PSFlag__c','Account_Number__c','Name','Description','tfcrmType__c','CloseDate','Probability','R90_Forecast_Category__c','tocExpectedRevenueDate__c','Opportunity_Owner__c'}; // Added 1 value as part of GTT-405, 'CIPS_PSFlag__c' added as part of GTT-2570
+        Set<String> oppStages1_4 = new Set<String> {Label.Opportunity_Stage_1, Label.Opportunity_Stage_2, Label.Opportunity_Stage_3, Label.Opportunity_Stage_4};
+        List<String> expiredQuoteList = new List<String> ();
+       // Set<Id> caseOppIds = new Set<Id>();
+       // List<Id> caseAccIds = new List<Id>();
+                 
+        List<Id> PrimaryQuote = new List<Id>();
+        Opportunity opp= new Opportunity();
+                
+                
+                /*Initialization ends--Sonal*/
+        
+        // Added by Vignesh for GTT-405 Start1
+        List<String> listOpptyUpdateFields = new List<String>();
+        Map<String,Boolean> OpptyUpdateFieldsChanged = new Map<String,Boolean>();
+        map<Id,Id> mapOfOptyOwnerId = new map<Id,Id>();
+            
+        for(String strOpptyUpdateFields:Label.OpptyUpdateFields.split(';')){
+            listOpptyUpdateFields.add(strOpptyUpdateFields);
+        }
+        // Added by Vignesh for GTT-405 End1
+        MAP< Id, String > oppIdStageMAP= new MAP< Id, String >(); //GTT-872
+        MAP<id, id> campOpptyMAP= new MAP<id, id>(); // GTT-1443
+        SET<Id> psOpptyIds= new SET<Id>(); //GTT-2570
+        Set<Id> OptyIDSet=new Set<ID>();//GTT-2543
+        Set<Id> optyIDSetCPQ=new Set<ID>();
+     //code added by Subin as part of RES-76 starts
+        //code moved above as part of 2399
+        set<Id> OpptylstId= new set<Id>();
+        if(newItems.keyset().size() > 0){
+            Map<Id,SObject> oppMap = new Map<Id,SObject>();
+      List<FeedItem> listFeedItem = new List<FeedItem>();//Added for GTT-3065
+             for(Opportunity op:  (list<Opportunity>)newItems.Values())
+            {
+                if(op.stageName=='8. Closed / No Order' && op.Account_Addressable__c==true){
+                OpptylstId.add(op.id);
+                }
+             
+                if(op.Redi_Flag__c == 'True')
+                {
+                    oppMap.put(op.Id,op);
+                }
+      //Added for GTT-3065 To track change in TR Forecast Category   
+             if(op.R90_Forecast_Category__c != oldItemsMap.get(op.Id).R90_Forecast_Category__c && isfeedcreated == false)
+             {
+                FeedItem opFeedItem = new FeedItem();
+                opFeedItem.ParentId = op.Id;
+                opFeedItem.Body = 'changed TR Forecast Category from '+oldItemsMap.get(op.Id).R90_Forecast_Category__c+ ' to '+ op.R90_Forecast_Category__c;
+                opFeedItem.Type = 'TextPost';
+                opFeedItem.NetworkScope = 'AllNetworks';
+                listFeedItem.add(opFeedItem);
+                
+             }                       
+            //GTT-3065 - END
+            }
+      //GTT-3065 - START 
+            if(listFeedItem.size()>0)                 
+            {
+                insert listFeedItem;
+                isfeedcreated = true;
+            }
+            //GTT-3065 - END 
+            if(oppMap.size() > 0)
+            {
+                Opportunity_RM_Handler.Update_RM_Flag(oppMap);
+            }
+        }
+        //code added by Subin as part of RES-76 ends
+ //code added by deepu as part of GTT-3676
+ //commented till sept. release
+        //Moving above as part of 2399
+        /*set<Id> OpptylstId= new set<Id>();
+        if(newitems.keyset().size()>0){
+            for(Opportunity op: (List<Opportunity>)newItems.values()){
+                if(op.stageName=='8. Closed / No Order' && op.Account_Addressable__c==true){
+                OpptylstId.add(op.id);
+                }
+            }
+        }*/
+        if(OpptylstId.size()>0){
+        UpdateCQSToNurtureSS8(OpptylstId);
+        }
+        //ends for GTT-3676
+
+        // Fetch the List of Oppties that satisfy the condition of our trigger
+        // try{
+        for(Opportunity opps:tempNewOptylist){
+            Opportunity oldOpp = (Opportunity)oldItems.get(opps.id);
+       
+
+            if(opps.accountId!=oldOpp.accountId){
+                accId.add(opps.accountId);
+                accId.add(oldOpp.accountId);
+            }
+      //SUNITHA SFCS-1412 STARTS HERE(Enhance Opportunity Association: Net USD & GBP fields should re-calculate if user re-opens Oppty (i.e from SS8 to SS1,2,3,4,5))  
+              
+            if((oldOpp.StageName == Label.Opportunity_Stage_8) && (opps.StageName == Label.Opportunity_Stage_1 || opps.StageName == Label.Opportunity_Stage_2 || opps.StageName == Label.Opportunity_Stage_3 || opps.StageName == Label.Opportunity_Stage_4 || opps.StageName == Label.Opportunity_Stage_5)){  
+                 //GSAMCalUpdate = true;  
+                 GSAMCalUpdateList.add(opps.id);  
+                   
+                 //strOppIds.add(opps.Id);  
+                 //  
+                  
+            }  
+            if(oldOpp.StageName == Label.Opportunity_Stage_8 && oppStages1_4.contains(opps.StageName) && opps.SBQQ__PrimaryQuote__c!=null) { 
+                System.debug('L3 Testing 2700360 expiredQuoteList Start');
+                expiredQuoteList.add(opps.SBQQ__PrimaryQuote__c);
+            }  
+            // SFCS-1412 ENDS HERE
+
+            /*Code started by sonal(UpdateNetGSAMForUltimateParentOpportunity)*/
+            //Checking the prior values and current value of the opportunity's field
+            Map<String,Boolean> fieldsChanged =TriggerUtility.isFieldChanged(opps,oldOpp,lstFields);
+            if(cjrUpdateRunOnce){
+                 if((((fieldsChanged.get('Ultimate_Parent_Opportunity__c')) || (fieldsChanged.get('Associated_Opportunity__c'))
+                   || (fieldsChanged.get('tocGSCSMonthlyRecurring__c')) || (fieldsChanged.get('Trigger_Net_GSAM_Calculation__c'))
+                   || fieldsChanged.get('tocGSCSOneTimeRevenue__c')
+                   || opps.Trigger_Net_GSAM_Calculation__c ) && !opps.BulkTool_CheckBox__c) || opps.StageName == '8. Closed / No Order'){
+                       //if opportunity's Parent Opportunity is null or empty
+                       if(String.valueOf(opps.Associated_Opportunity__c) == null || String.valueOf(opps.Associated_Opportunity__c)==''){
+                           ulitimateId=opps.id;
+                           ulitimateId=ulitimateId.substring(0,15);
+                           setUltimateParent.add(ulitimateId);//adding the Current Opprtunity id
+                           setUltimateParentId.add(opps.Ultimate_Parent_Opportunity__c);//adding the current opportunity's Ultimate Parent Opportunity
+                           accountIdSet.add(opps.accountId);//adding the cuurent opportunity's Account
+                       }else if(opps.Ultimate_Parent_Opportunity__c!= null || opps.Ultimate_Parent_Opportunity__c!=''){
+                           //if opportunity's Ultimate Parent Opportunity is null or empty
+                           opportunityMap.put(opps.Ultimate_Parent_Oportunity__c,opps.id);
+                           setUltimateParentId.add(opps.Ultimate_Parent_Opportunity__c);//adding the current opportunity's Ultimate Parent Opportunity
+                           accountIdSet.add(opps.accountId);//adding the cuurent opportunity's Account
+                       }
+                }
+
+            }
+            /*Code end Sonal*/
+            //srikanth(ExpectedRevSS7)
+            If(opps.genesis_flag__c == 'True' && opps.StageName == Label.Opportunity_Stage_7 && oldOpp.StageName != Label.Opportunity_Stage_7 && opps.QLI_Max_Recurring_Rev__c != null && opps.BulkTool_CheckBox__c == false){ 
+             OppRecurringRevMap.put(opps.id, opps.QLI_Max_Recurring_Rev__c);
+               }//srikanth
+
+            //ramya-- (triggerOpportunity)
+            if((oldOpp.tfcrmMkt__c == 'Corporate United States') &&(oldOpp.tfcrmType__c != 'Notified Cancellation' || oldOpp.tfcrmType__c != 'Suspend') &&(oldOpp.StageName == Label.Opportunity_Stage_5) &&(oldOpp.StageName == opps.StageName)
+               &&(oldOpp.tocPurchaseOrderNumber__c != opps.tocPurchaseOrderNumber__c ||oldOpp.Is_PO_Required__c != opps.Is_PO_Required__c)){
+                   opportunityChanged.put(opps.id,opps);
+               }
+            //Check if Accountid or Ownerid Of oppty is changed
+            if(fieldsChanged.get('AccountId') || fieldsChanged.get('OwnerId')){
+                executeStatements = true;
+                accInputMapOld.put(oldOpp.AccountId, oldOpp);
+                accInputMapNew.put(opps.AccountId, opps);
+                opportunityOwnerIdQueryMap.put(oldOpp.OwnerId ,oldOpp);
+            }
+            //--ramya
+            //---Ranjitha(triggerGenesisOpportunity)
+            // To avoid recursive calls calling Runonce
+            
+            if(OpportunityTriggerUtility.runOnce()){
+                if((opps.genesis_flag__c=='True'|| opps.GRC_Opportunity__c==True) && (fieldsChanged.get('StageName'))){
+                    /*Check if opportunity is changed to Stage.8 / Win Loss Reason is Not Persuied and then add the  opportunity ID's to different sets */
+                    if(opps.StageName==Label.Opportunity_Stage_8 && oldItemsMap.get(opps.id).StageName!=Label.Opportunity_Stage_8
+                       || (opps.tfcrmWinLossReason__c=='Not Pursued'  && oldItemsMap.get(opps.id).tfcrmWinLossReason__c!='Not Pursued')){
+                           setExpiredOppty.add(opps.id);
+                           
+                           setOpptyFinalSet.add(opps.id);
+                       }
+                    else if(opps.StageName!=Label.Opportunity_Stage_8 && oldItemsMap.get(opps.id).StageName==Label.Opportunity_Stage_8){
+                        setInProgressOppty.add(opps.id);
+                        setOpptyFinalSet.add(opps.id);
+                    }
+                }
+            }
+            
+            // Added by Vignesh for GTT-405 Start2
+            if(!listOpptyUpdateFields.isEmpty())
+            {
+                if(!opps.isClosed)
+                {
+                    OpptyUpdateFieldsChanged = TriggerUtility.isFieldChanged(opps,oldOpp,listOpptyUpdateFields);
+                    for(String OpptyUpdate : listOpptyUpdateFields){
+                        if(OpptyUpdateFieldsChanged.get(OpptyUpdate)){
+                            mapOfOptyOwnerId.put(opps.Id,opps.OwnerId);
+                        }
+                    }
+                }
+                if((fieldsChanged.get('isClosed') && opps.isClosed))
+                {
+                    mapOfOptyOwnerId.put(opps.Id,opps.OwnerId);
+                }
+            }
+            // Added by Vignesh for GTT-405 End2
+            //GTT-872 CODE STARTS
+            Static_Values__c opptyStage= Static_Values__c.getValues('Oppty_Voided_Stage'); 
+            if( !stopDocuSignRecursion && ( opps.genesis_flag__c.equalsIgnoreCase('True') || opps.GRC_Opportunity__c )  && ( ( opps.stagename == Label.Opportunity_Stage_8 && oldOpp.stagename != Label.Opportunity_Stage_8 ) || ( opptyStage != NULL && opps.stagename == opptyStage.Value__c && oldOpp.stagename != opptyStage.Value__c ) )  ){
+               stopDocuSignRecursion=true;
+                oppIdStageMAP.put(opps.Id, opps.stagename);
+            }
+            //GTT-872 CODE ENDS
+            // GTT-1443 CODE STARTS HERE
+            
+            if(opps.CampaignId != null  && !isLeadConverted && !fieldsChanged.isEmpty() && fieldsChanged.get('CampaignId') ){
+                    campOpptyMAP.put(opps.Id,opps.CampaignId);
+                }
+            // GTT-1443 CODE ENDS HERE
+            //GTT-2570 CODE STARTS HERE 
+                              
+            if( opps.CIPS_PSFlag__c && opps.Deal_Type__c == null && fieldsChanged.ContainsKey('CIPS_PSFlag__c') && fieldsChanged.get('CIPS_PSFlag__c') && !oldOpp.CIPS_PSFlag__c && opps.StageName != Label.Opportunity_Stage_0 ){
+                psOpptyIds.add( opps.Id);
+                
+            } //GTT-2570 CODE ENDS HERE
+            //Added as Part of GTT-2543             
+             else if(opps.CIPS_PSFlag__c && opps.Deal_Type__c ==null && (opps.LastModifiedById!=Label.RASI_User_ID)&& (fieldsChanged.get('Account_Number__c') || fieldsChanged.get('Name') || fieldsChanged.get('Description') || fieldsChanged.get('tfcrmType__c') || fieldsChanged.get('CloseDate') || fieldsChanged.get('Probability') || fieldsChanged.get('StageName') || fieldsChanged.get('R90_Forecast_Category__c') || fieldsChanged.get('tocExpectedRevenueDate__c') || fieldsChanged.get('Opportunity_Owner__c')) && opps.StageName!= Label.Opportunity_Stage_0 && opps.tocOpportunityProductCount__c == oldOpp.tocOpportunityProductCount__c){
+                      OptyIDSet.add(opps.Id);
+                      
+                   }//Added as Part of GTT-2543
+              else if((opps.Deal_Type__c =='Commercial'||opps.Deal_Type__c == 'Early Stage') && opps.CIPS_PSFlag__c && (fieldsChanged.get('CIPS_PSFlag__c') || fieldsChanged.get('Name') || fieldsChanged.get('Description') || (fieldsChanged.get('tocMonthlyRecurring__c')!=null && fieldsChanged.get('tocMonthlyRecurring__c')) || (fieldsChanged.get('tocMonthlyRecurring__c')!= null && fieldsChanged.get('tfcrmOneTimeRevenue__c')) || fieldsChanged.get('StageName') || fieldsChanged.get('Opportunity_Owner__c')) ){
+                       optyIDSetCPQ.add(opps.Id);
+                       
+                   }//Added as Part CIPS */
+                 if( opps.Deal_Type__c == 'Refinitiv Access' && opps.stagename == Label.Opportunity_Stage_8 &&(opps.stagename!=oldOpp.StageName))
+            {
+                
+                
+                
+                
+                Opportunity o = new Opportunity (Id= opps.id,stagename=opps.stagename,SBQQ__PrimaryQuote__c=opps.SBQQ__PrimaryQuote__c, AccountId= opps.AccountId);
+                
+                
+                CreateAndUpdateCase(o);
+                
+            }   
+        }//end of FOR loop
+    //Sunitha ---SFCS-1412 Start  
+           
+        if(GSAMCalUpdateList.size()>0){  
+             GenesisPipelineManagement.netGsamCalculationFromOptyProd(tempNewOptylist);  
+        }  
+        //Sunitha ---SFCS-1412 End
+        //GTT-2570 CODE STARTS HERE
+        if(psOpptyIds.size() >0 && !system.isbatch() ){
+            
+            CIPSCalloutActionHandler.processCIPSRequestForOpportunity(psOpptyIds, Label.CIPS_Opportunity_Insert);
+        }
+        //GTT-2570 CODE ENDS HERE 
+        if(optyIDSetCPQ.Size()>0  && !isRecCallout){
+             
+             CIPSCalloutActionHandler.processCIPSRequestForOpportunityCPQ(optyIDSetCPQ);
+             isRecCallout=true;
+        }   
+        //GTT-2543 CODE STARTS HERE
+        if(!OptyIDSet.isEmpty() && OptyIDSet.Size()>0 && !isRecCallout && !system.isbatch()){
+             System.debug('L3 Testing 2700360 CIPSCalloutActionHandler Start');
+             CIPSCalloutActionHandler.processCIPSRequestForOpportunity(OptyIDSet,Label.CIPS_Opportunity_Update);
+             isRecCallout=true;
+        }
+        //GTT-2543 CODE ENDS HERE  
+        if(!setOpptyFinalSet.isEmpty()){
+            // This Method Updates the Quote Status Fields based on Oppty Fields
+            setQuotestoExpired(setOpptyFinalSet,setExpiredOppty,setInProgressOppty);
+        }
+
+        if(!expiredQuoteList.isEmpty()) {
+            resurrectExpiredQuotes(expiredQuoteList);
+        }
+
+        //ramya--
+        //Call compareAccountsAndUpdateProductCurrency method to update oppLineitem currency(triggerOpportunity)
+        if(tempNewOptylist.size()>0 && tempOldOptylist.size()>0){
+            System.debug('L3 Testing 2700360 compareAccountsAndUpdateProductCurrency Start');
+            compareAccountsAndUpdateProductCurrency((List<Opportunity>)newItems.values(),(Map<Id,Opportunity>)oldItems,accId);
+        }
+
+        //Call to TriggerHandlingOfOpportunity.tocOMSInstruction method to upsert tfomsInstructionsAndAttachment records
+        if(opportunityChanged.size() > 0){
+            System.debug('L3 Testing 2700360 TriggerHandlingOfOpportunity Start');
+            TriggerHandlingOfOpportunity.tocOMSInstruction(tempNewOptylist,opportunityChanged);
+        }
+
+        //Call to TriggerHandlingOfOpportunity.AfterupdateOfOpportunity to update oppty fields with OPPTY.tocClonedFrom__c values
+        if(billingReportDateChangeMap.size() >0){
+            if(!Test.isRunningTest()){
+                System.debug('L3 Testing 2700360 AfterupdateOfOpportunity Start');
+                TriggerHandlingOfOpportunity.AfterupdateOfOpportunity( billingReportDateChangeMap,(Map<Id,Opportunity>)newItems);
+            }
+        }
+
+        if(!Test.isRunningTest()){
+            //Call to AfterupdateOfOpportunity to update Oppty currency and sales team)
+            if(executeStatements == true ){
+                System.debug('L3 Testing 2700360 TriggerHandlingOfOpportunity.AfterupdateOfOpportunity Start');
+                TriggerHandlingOfOpportunity.AfterupdateOfOpportunity( tempNewOptylist , tempOldOptylist , accInputMapOld ,  accInputMapNew , opportunityOwnerIdQueryMap ,(Map<Id,Opportunity>)newItems, (Map<Id,Opportunity>)oldItems);
+            }
+        }
+        //--ramya
+
+        ////Srikanth(ExpectedRevSS7)
+        if(OppRecurringRevMap != null && OppRecurringRevMap.Size()>0){
+            //call for the method to update the biil start date
+            System.debug('L3 Testing 2700360 updateOpportunityBillStartDate.AfterupdateOfOpportunity Start');
+            updateOpportunityBillStartDate(OppRecurringRevMap,(Map<Id,Opportunity>)newItems);
+
+        }//Srikanth
+
+        /*Added by Sonal(UpdateNetGSAMForUltimateParentOpportunity)*/
+        if(accountIdSet != null && accountIdSet.size() > 0){
+            
+            netGsamCalculation(accountIdSet,setUltimateParent,setUltimateParentId,opportunityMap);
+        }
+        
+        // Added by Vignesh for GTT-405 Start3
+        if(mapOfOptyOwnerId != null && !mapOfOptyOwnerId.isEmpty() && TriggerUtility.ExecuteTriggerEvent('PTSAMOpportunityUpdate')){
+            
+            ESC_PushTopicHelperObj.createRecordForOpptyUpdate(mapOfOptyOwnerId);
+        }
+        // Added by Vignesh for GTT-405 End3
+        
+        //GTT-872 CODE STARTS
+        
+        if( !oppIdStageMAP.isEmpty() && !system.isbatch()){ //GTT-4985
+            docuSignStatusUpdate.updateDocuSignStatusRec(oppIdStageMAP);      
+        }
+        //GTT-872 CODE END
+         //GTT-1443 CODE STARTS HERE.
+        
+        if(campOpptyMAP!=null && !campOpptyMAP.isEmpty()){
+
+            docuSignStatusUpdate.createCampInfluence(campOpptyMAP);
+          
+        }
+        //GTT-1443 CODE ENDS HERE
+        System.debug('L3 Testing 2700360 End');
+    }//End of Generic After Update
+
+    /* **********************************************************************************************************************************
+Functionalities Implemented:
+1.Neenu : Creating TeamMembers for incoming Opportunities by fetching values from the Associated Opportunity's TeamMembers.(copySalesTeamFromTrial)
+2.Ranjitha :Updation of Fields of Catelog entry Object based on conditions on Opportunity fields (ccpOpportunityCreateDefaultCatalogEntries)
+3.Ramya : Call for AfterInsertOfOpportunity_SalesTeam method to insert the members added to the standard sales team(triggerOpportunity)
+4.Ramesh : Associating Parent Opportunity Campaign to new opportunity during opportunity clone()
+5.Sonal :Update Ultimate_Parent_Opportunity__c,tocGSCSMonthlyRecurring__c,tocGSCSOneTimeRevenue__C (UpdateAssociatedOppty)
+**********************************************************************************************************************************/
+
+    //Generic After Insert
+    public static void genericAfterInsert(Map<Id,SObject> newItems){
+
+        System.debug('L3 Testing 2700360 genericAfterInsert');
+        Map<id,id> oppRec = new Map<id,id>();
+        Boolean run = true;
+        Map<id,String> oppRec1 = new Map<id,String>();
+        Set<Id> setAccountId = new Set<Id>();
+        Set<Id> oppAssociatedIdSet= new Set<Id>();
+        Map<String,String> oppAssociatedOppMap= new Map<String,String>();
+        Set<Id> partnerAccountSet = new Set<Id> ();
+        /*initialization Sonal start*/
+        Boolean cjrUpdateRunOppty2=CJRUpdate.runOppty2();
+        Set<id> oportunityLists = new Set<id>();
+        Set<Id> associatedIdSet=new Set<Id>();
+        Map<Id,Id> associateOptyMap = new Map<Id,Id>();
+        /*initialization Sonal end*/
+        Map<id,id> clonedOppMap = new Map<id,id>();
+        Map<Id,String> genesisOppMap = new Map<Id,String>();
+        Map<String, Opportunity> opportunityOwnerIdQueryMap = new Map<String, Opportunity>();
+        Map<Id,Opportunity> afterInsertAccInputMap = new  Map<Id,Opportunity>();
+        Map<Id, String> oppAndAssociatedOppMap = new Map<Id, String>();
+        set<Id> idsforAccountAssociatedOwner = new set<Id>();
+        Map<String, Opportunity> mapOpptoCreaContRole = new Map<String, Opportunity>();
+        Set<ID> accountIdSetforMainsaleContact= new Set<Id>(); 
+         Map<Id,Id> mapIdsofParentOptyandOpty;
+          MAP<id, id> campOpptyMAP= new MAP<id, id>(); // GTT-1443
+    //code added by Subin as part of RES-76 starts
+        System.debug('L3 Testing 2700360 newItems.keyset'+ newItems.keyset());
+        if(newItems.keyset().size() > 0){
+            Map<Id,SObject> oppMap = new Map<Id,SObject>();
+            mapIdsofParentOptyandOpty= new Map<Id,Id>();
+             for(Opportunity op:  (list<Opportunity>)newItems.Values())
+            {
+                if(op.Redi_Flag__c == 'True')
+                {
+                    oppMap.put(op.Id,op);
+                }
+                    if(op.Associated_Id__c!=null  && op.Trial_Opportunity__c)
+                    {
+                       mapIdsofParentOptyandOpty.put(op.Associated_Id__c,Op.Id);
+                    }     
+                 }
+            if(oppMap.size() > 0)
+            {
+                System.debug('L3 Testing 2700360 Opportunity_RM_Handler.Update_RM_Flag START');
+                Opportunity_RM_Handler.Update_RM_Flag(oppMap);
+                System.debug('L3 Testing 2700360 Opportunity_RM_Handler.Update_RM_Flag END');
+                
+            }
+            // Implemented as a part of TSV-235
+            if(mapIdsofParentOptyandOpty.size()>0)
+             {
+                System.debug('L3 Testing 2700360 OppContctRoleforTrialOpty START');
+                OppContctRoleforTrialOpty(mapIdsofParentOptyandOpty);
+                System.debug('L3 Testing 2700360 OppContctRoleforTrialOpty END');
+             }
+           // end
+        }
+        //code added by Subin as part of RES-76 ends
+
+        //if(UserInfo.getName()!=Label.InactiveAccountContactUser){
+        List<Opportunity> opps = new List<Opportunity>();
+        //try{
+        for( Opportunity opp :(List<Opportunity>)newitems.values()){
+                 if(!Opp.IsManageAsset__c && !Opp.Trial_Opportunity__c && opp.tocClonedFrom__c ==null && !opp.isConverted__c && !opp.isFromLead__c){                
+                    mapOpptoCreaContRole.put(Opp.Accountid,opp);
+                    accountIdSetforMainsaleContact.add(Opp.Accountid);              
+                }
+            if(opp.Partner_Account__c != null && opp.Partner_Role__c != null){
+                partnerAccountSet.add(opp.Partner_Account__c);
+            }
+
+
+            if(opp.tocClonedFrom__c!= null){
+                //preparing Map of Parent Opportunity with Cloned Opportunity
+                clonedOppMap.put(opp.tocClonedFrom__c,opp.id);
+            }
+
+            if(opp.Trial_Opportunity__c && (opp.Associated_Id__c!=null && opp.Associated_Id__c!='') && opp.tocClonedFrom__c==null){
+                //Preparing Map of genesis trial Opportunity with Parent/associated Opportunity
+                genesisOppMap.put(opp.Id,opp.Associated_Id__c);
+            }
+
+            /*Code starts By Sonal*/
+            if(cjrUpdateRunOppty2){
+                //check if Parent Opportunity Id is not null
+                run=false;
+                if(opp.Associated_Id__c != 'null' && opp.Associated_Id__c!=''){
+                    if(!opp.name.startsWith('Conv20')){
+                        oportunityLists.add(opp.id);
+                    }
+                }
+            }/*Code ends--sonal*/
+            //ranjitha --
+            //Check if Opportunity type is a Conference opportunity(Record type is conference opportunity)(ccpOpportunityCreateDefaultCatalogEntries)
+            if((Static_Values__c.getInstance('Opportunity.Conference Opportunity')!=null) && (opp.RecordTypeId == Static_Values__c.getInstance('Opportunity.Conference Opportunity').Value__c)){
+                   opps.add(opp);
+               }//ranjitha
+            //neenu--
+            //Check if the Opportunity is a trial Opportunity(copySalesTeamFromTrial)
+            if(opp.Trial_Opportunity__c == true && opp.Associated_Id__c != 'null'){
+
+                oppAssociatedIdSet.add(opp.Associated_Id__c);
+                oppAssociatedOppMap.put(opp.Associated_Id__c,opp.id);
+            }
+            else if(opp.Name.contains('Conv20')){
+                //List for the AssociatedOpportunities
+                oppAssociatedIdSet.add(opp.Associated_Opportunity__c);
+                String parentid=opp.Associated_Opportunity__c;
+                String associatedId=parentid.substring(0,15);
+                //Map to hold the AssociatedId and OpportunityId
+                oppAssociatedOppMap.put(associatedId,opp.id);
+            }
+            //--neenu
+            setAccountId.add(opp.AccountId);
+            //ramya--(triggerOpportunity)
+            //OpportunityList.add(opp);
+            afterInsertAccInputMap.put(opp.AccountId, opp);
+            opportunityOwnerIdQueryMap.put(opp.OwnerId,opp);
+            if(opp.OwnerOfAssociatedAccount__c != null){ //|| opp.OwnerOfAssociatedAccount__c != ''
+                idsforAccountAssociatedOwner.add(opp.OwnerOfAssociatedAccount__c);
+            }
+            
+             
+            //GTT-1443 CODE STARTS HERE
+            if(opp.CampaignId != null && !opp.IsFromLead__c){
+                campOpptyMAP.put(opp.Id,opp.CampaignId);
+            }
+            
+            //GTT-1443 CODE ENDS HERE
+        }//end of for loop
+        //GTT-1443 CODE STARTS HERE.
+        if(campOpptyMAP!= null && !campOpptyMAP.isEmpty() ){
+                 
+        docuSignStatusUpdate.createCampInfluence(campOpptyMAP);
+              
+        } 
+        //For GTT-1842 - START
+        else if(!clonedOppMap.isEmpty() || !genesisOppMap.isEmpty()){
+            opptyCampaignAssociation(clonedOppMap,genesisOppMap);
+        }  
+        //For GTT-1842 - END
+        //GTT-1443 CODE ENDS HERE  
+        
+        // TSV-235 July-25-2019
+        if(!accountIdSetforMainsaleContact.isEmpty() && accountIdSetforMainsaleContact.size() > 0)
+        {
+            
+            populatePrimaryContOnOpp(mapOpptoCreaContRole, accountIdSetforMainsaleContact, newItems.keyset());
+        } 
+        //sonal(UpdateAssociatedOppty)
+        if(!oportunityLists.isEmpty()){
+            //Update Ultimate_Parent_Opportunity__c,tocGSCSMonthlyRecurring__c,tocGSCSOneTimeRevenue__C,Associated_Opportunity__c
+            
+            opptyAssociationUltimateParent(oportunityLists);
+            System.debug('L3 Testing 2700360 opptyAssociationUltimateParent End');
+        }
+        //call for AfterInsertOfOpportunity_SalesTeam method to insert the members added to the standard sales team(triggerOpportunity)
+        if(!Test.isRunningTest()){
+            TriggerHandlingOfOpportunity.AfterInsertOfOpportunity_SalesTeam((List<Opportunity>)newitems.values(),(Map<Id,Opportunity>)newItems , afterInsertAccInputMap,opportunityOwnerIdQueryMap, idsforAccountAssociatedOwner);
+            triggerHandlingOFOpportunity.isExecuted = true ;
+        }
+
+        //call to OpportunityToAccountPartnerUpdate method to update opportunity Partner Role with associated Account Partner Role
+        if(partnerAccountSet.size()>0){
+            System.debug('L3 Testing 2700360 OpportunityToAccountPartnerUpdate Start');
+            OpportunityToAccountPartnerUpdate((List<Opportunity>)newItems.values(),partnerAccountSet);
+            System.debug('L3 Testing 2700360 OpportunityToAccountPartnerUpdate Start END');
+        }  //--ramya
+
+        //call to update the opportunity team members
+        System.debug('L3 Testing 2700360 updateOpportunityTeamMembers');
+        updateOpportunityTeamMembers(setAccountId, (List<Opportunity>)newitems.values());
+        System.debug('L3 Testing 2700360 updateOpportunityTeamMembers END');
+        //neenu--
+        //Check if the OpportunitySet has values(copySalesTeamFromTrial)
+        if(!oppAssociatedIdSet.isEmpty()){
+             System.debug('L3 Testing 2700360 CreateOppTeamMembers');
+            CreateOppTeamMembers(oppAssociatedIdSet,oppAssociatedOppMap);
+            System.debug('L3 Testing 2700360 CreateOppTeamMembers END');
+
+        }
+        //--neenu
+        // This method associating Parent Opportunity Campaign to new opportunity during opportunity clone
+        //Commented for GTT-1842
+        /* if(!clonedOppMap.isEmpty() || !genesisOppMap.isEmpty()){
+            opptyCampaignAssociation(clonedOppMap,genesisOppMap);
+        } */ 
+        
+        
+         /* MTI-3200 | Added by Manav | Notify Account Owner on Opty Creation*/
+        System.debug('L3 Testing 2700360 OptyTeamMemTriggerHelper');
+        OptyTeamMemTriggerHelper.notifyAccountOwneronOptyCreation(newItems.keySet());
+        System.debug('L3 Testing 2700360 OptyTeamMemTriggerHelper End');
+        /*Changes end here*/
+    } // end of genericAfterInsert
+
+    /*********************************************************************************************************************
+Functionalities Implemented:
+1.Neenu  : Method (directly called from handler class) to sync Opportunity,Quote and Opportunity LineItem and QuoteLineItems
+*********************************************************************************************************************/
+
+    public static void OppQuoteAndOppQuoteLineItemSync(Map<Id,SObject> newItems, Map<Id,SObject> oldItems) {
+        System.debug('L3 Testing 2700360 OppQuoteAndOppQuoteLineItemSync Start');
+        List<Opportunity> newOpportunityList = (List<Opportunity>)newItems.values();
+        if (TriggerStopper.stopOpp) return;
+        TriggerStopper.stopOpp = true;
+        if(triggerstopper.oppquoteinteger <5){
+            triggerstopper.oppquoteinteger++;
+            //Initialize variables
+            Set<Id> nonSyncedOppSet = new Set<Id>();
+            List<Opportunity> nonSyncedOpps = new List<Opportunity>();
+            Map<Id,Opportunity> opportunityMap = new Map<Id,Opportunity> ();
+            Map<Id, Id> syncQuoteMap = new Map<Id, Id>();
+            Map<string, boolean> mapFieldChangedStatus = new Map<string, boolean>();
+
+            Set<String> quoteFields = QuoteSyncUtil.getQuoteFields();
+            List<String> oppFields = QuoteSyncUtil.getOppFields();
+
+            //Calling QuoteSyncUtil class getQuoteFieldsString method to fetch Quote Fields and make it comma seperated
+            String quote_fields = QuoteSyncUtil.getQuoteFieldsString();
+            String opp_fields = QuoteSyncUtil.getOppFieldsString();
+
+            List<String> lstFieldsChanged = New List<String>{ 'SyncedQuoteId'};
+            List<String>  FieldChagedSibatri =New List<String>{'Order_Header_Status__c', 'Quote_Valid_to__c', 'Quote_Status__c', 'Access_Statement__c', 'Access_Statement_Order_Number__c'};
+                for(Opportunity opps:newOpportunityList){
+                    if(!opps.BulkTool_CheckBox__c){//Added by Mayur for Bulk Tool to avoid all syncs
+                      Opportunity oldOpportunity = (Opportunity)oldItems.get(opps.id);
+
+                      Map<String,Boolean> fieldsChanged =TriggerUtility.isFieldChanged(opps,oldOpportunity ,lstFieldsChanged);
+                      Map<String,Boolean> fieldsChnaged1 = TriggerUtility.isFieldChanged(opps,oldOpportunity ,FieldChagedSibatri);
+                     
+                      if (fieldsChanged.get('SyncedQuoteId') && (opps.genesis_flag__c.equalsIgnoreCase('True') || opps.GRC_Opportunity__c )) {
+                          syncQuoteMap.put(opps.SyncedQuoteId, opps.Id);
+                          continue;
+                      }
+                      if(opps.SyncedQuoteId != NULL){
+                          //Added as part of 101-Sibatri
+                          if(fieldsChnaged1.get('Order_Header_Status__c') || fieldsChnaged1.get('Quote_Valid_to__c')
+|| fieldsChnaged1.get('Quote_Status__c') || fieldsChnaged1.get('Access_Statement__c') || fieldsChnaged1.get('Access_Statement_Order_Number__c'))
+                            {
+                                nonSyncedOppSet.add(opps.SyncedQuoteId);
+                                opportunityMap.put(opps.Id,opps);
+                            }
+                            //Added as part of 101-Sibatri-end
+                      }
+                   }
+                }   //end of for loop
+
+            if (nonSyncedOppSet.size() > 0) {
+                OpportunityQuoteSync(nonSyncedOppSet,opportunityMap,quote_fields,quoteFields);
+            }
+            // Check start sync quote with matching opp lines and quote lines
+            if (!syncQuoteMap.isEmpty()) {
+                OppQuoteLineItemsSync(syncQuoteMap);
+            }
+        }
+     TriggerStopper.stopOpp = false;
+     
+    }
+
+    /*********************************************************************************************************************
+* Call From    : OppQuoteAndOppQuoteLineItemSync Method(After Update)
+* Parameters   : Map of QuoteIds and OpportunityIds
+* return       : Void
+* Action       : Sync Opportunity and Quote Fields.
+*********************************************************************************************************************/
+
+    public static void OpportunityQuoteSync( Set<Id> nonSyncedOppSet,Map<Id,Opportunity> oppMap,String quote_fields, Set<String> quoteFields){
+
+            System.debug('L3 Testing 2700360 OpportunityQuoteSync Start');
+            //Construct the query to fetch all the Quotes
+            String quoteQuery = 'select Id, OpportunityId' + String.escapeSingleQuotes(quote_fields) + ' from Quote where Id IN ';
+            quoteQuery+= ':nonSyncedOppSet';
+
+            List<Quote> quotesList = Database.query(quoteQuery);
+            List<Quote> updateQuotes = new List<Quote>();
+
+            for (Quote quote : quotesList) {
+                //Get the OpportunityId of the incoming quote
+                Opportunity opp = oppMap.get(quote.OpportunityId);
+                boolean hasChange = false;
+
+                //Iterate through quote fields
+                for (String quoteField : quoteFields) {
+                    String oppField = QuoteSyncUtil.getQuoteFieldMapTo(quoteField);
+                    Object oppValue = opp.get(oppField);
+                    Object quoteValue = quote.get(quoteField);
+
+                    //Check if there is any change in the oppvalue and quotevalue .Exclude QuoteStatus field.
+                    if (oppValue != quoteValue && oppField !='Quote_Status__c') {
+                        hasChange = true;
+                        if (oppValue == null ) quote.put(quoteField, null);
+                        else quote.put(quoteField, oppValue);
+                    }
+                }
+                if (hasChange) {
+                    updateQuotes.add(quote);
+                }
+            }
+
+            TriggerStopper.stopOpp = TRUE;
+
+            if(!updateQuotes.isEmpty()){
+                Database.update(updateQuotes);
+            }
+        TriggerStopper.stopOpp = false;
+        
+    }
+
+    /*********************************************************************************************************************
+* Call From    : OppQuoteAndOppQuoteLineItemSync Method(After Update)
+* Parameters   : Map of QuoteIds and OpportunityIds
+* return       : Void
+* Action       : Sync QuoteLineItems and OpportunityLineItems.
+*********************************************************************************************************************/
+
+    public static void OppQuoteLineItemsSync(Map<Id,Id> SyncQuoteMap ){
+
+        System.debug('L3 Testing 2700360 OppQuoteLineItemsSync Start');
+        Set<Id> syncQuoteIdSet = SyncQuoteMap.keySet();
+        List<Id> syncOppIdList = SyncQuoteMap.values();
+
+        String qliFields = QuoteSyncUtil.getQuoteLineFieldsString();
+        String oliFields = QuoteSyncUtil.getOppLineFieldsString();
+
+        //Construct the query to fetch the quotelineitems
+        String qliQuery = 'select Id, QuoteId, PricebookEntryId, UnitPrice, Quantity, Discount, SortOrder' + String.escapeSingleQuotes(qliFields) + ' from QuoteLineItem where QuoteId IN ';
+        qliQuery+=' :syncQuoteIdSet order by QuoteId, SortOrder ASC';
+        //Construct the query to fetch opportunitylineitems
+        String oliQuery = 'select Id, OpportunityId, PricebookEntryId, UnitPrice, Quantity, Discount, SortOrder' + String.escapeSingleQuotes(oliFields) + ' from OpportunityLineItem where OpportunityId IN';
+        oliQuery+= ':syncOppIdList order by OpportunityId, SortOrder ASC';
+        
+        
+
+        List<QuoteLineItem> qlis = Database.query(qliQuery);
+        List<OpportunityLineItem> olis = Database.query(oliQuery);
+
+        Map<Id, List<OpportunityLineItem>> oppToOliMap = new Map<Id, List<OpportunityLineItem>>();
+        Map<Id, List<QuoteLineItem>> quoteToQliMap = new Map<Id, List<QuoteLineItem>>();
+        //Iterate through each quotelineitems
+        for (QuoteLineItem qli : qlis) {
+            //Fetch the QuoteLineItems
+            List<QuoteLineItem> qliList = quoteToQliMap.get(qli.QuoteId);
+            if (qliList == null) {
+                qliList = new List<QuoteLineItem>();
+            }
+            qliList.add(qli);
+            //Map to hold the QuoteId and its respective QuoteLineItems
+            quoteToQliMap.put(qli.QuoteId, qliList);
+        }
+        //Iterate through each OpportunityLineItems
+        for (OpportunityLineItem oli : olis) {
+            //Fetch the OpportunityLineItems
+            List<OpportunityLineItem> oliList = oppToOliMap.get(oli.OpportunityId);
+            if (oliList == null) {
+                oliList = new List<OpportunityLineItem>();
+            }
+            oliList.add(oli);
+            //Map to hold the OpportunityId and its respective OpportunityLineItems.
+            oppToOliMap.put(oli.OpportunityId, oliList);
+        }
+
+        Set<OpportunityLineItem> updateOliSet = new Set<OpportunityLineItem>();
+        List<OpportunityLineItem> updateOliList = new List<OpportunityLineItem>();
+        //Call to QuoteSyncUtil class getQuoteLineFields method to fetch the QuoteLineItemFields
+        Set<String> quoteLineFields = QuoteSyncUtil.getQuoteLineFields();
+
+        for (Id quoteId : syncQuoteMap.keySet()) {
+            //Get the respective OpportunityId from the quote
+            Id oppId = syncQuoteMap.get(quoteId);
+            List<QuoteLineItem> quotelines = quoteToQliMap.get(quoteId);
+            List<OpportunityLineItem> opplines = oppToOliMap.get(oppId);
+
+            //Ensure that the lists are not empty
+            if (quotelines != null && opplines != null && !quotelines.isEmpty() && !opplines.isEmpty()) {
+                // Iterate through each quoteLineItems
+                for (QuoteLineItem qli : quotelines) {
+                    boolean hasChange = false;
+                    //Iterate through each OpportunityLineItems
+                    for (OpportunityLineItem oli : opplines) {
+                        if (oli.pricebookentryid == qli.pricebookentryId && oli.UnitPrice == qli.UnitPrice && oli.Quantity == qli.Quantity && oli.Discount == qli.Discount && oli.SortOrder == qli.SortOrder) {
+                            if (updateOliSet.contains(oli)) continue;
+                            //Iterate through each quoteLineItemFields
+                            for (String qliField : quoteLineFields) {
+                                String oliField = QuoteSyncUtil.getQuoteLineFieldMapTo(qliField);
+                                Object oliValue = oli.get(oliField);
+                                Object qliValue = qli.get(qliField);
+                                //Check if there is any change in OpportunityLineitem and QuoteLineItem field values
+                                if (oliValue != qliValue) {
+                                    hasChange = true;
+                                    //Keep the OpplineItem field value as null,if the QuoteLineitem field value is null
+                                    if (qliValue == null) oli.put(oliField, null);
+                                    //sync between OpportunityLineItem and QuoteLineItem fields
+                                    else oli.put(oliField, qliValue);
+                                }
+                            }
+
+                            if (hasChange) {
+                                updateOliSet.add(oli);
+                            }
+
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!updateOliSet.isEmpty()) {
+            updateOliList.addAll(updateOliSet);
+            TriggerStopper.stopQuote = true;
+            TriggerStopper.stopOppLine = true;
+            TriggerStopper.stopQuoteLine = true;
+            //Update the OpportunityLineItems
+            Database.update(updateOliList);
+            updateOliSet.clear();
+            updateOliList.clear();
+            TriggerStopper.stopQuote = false;
+            TriggerStopper.stopOppLine = false;
+            TriggerStopper.stopQuoteLine = false;
+        }
+        
+    }
+
+
+    /****************************************************************************************************************************************************************
+Purpose     : 1. Associating Parent Opportunity Campaign to new opportunity during opportunity clone
+2. Associating Parent Opportunity Campaign to new genesis trial opportunity during Opportunity creation from opportunity 'Associated Opportunity'
+related list
+Parameters  : List of Opportunities
+Returns     : void
+Call From   : genericAfterInsert method
+****************************************************************************************************************************************************************/
+//Changes for GTT-1437 to incorporate Campaign Influence
+    public static void opptyCampaignAssociation(Map<id,id> clonedOppMap,Map<id,String> genesisOppMap){
+        System.debug('L3 Testing 2700360 opptyCampaignAssociation Start');
+        List<opportunity> parentOpptyList = new List<opportunity>();
+        //List<Campaign_Opportunity_Link__c> campaignInsertList = new List<Campaign_Opportunity_Link__c>();
+        LIST<CampaignInfluence> insertCapInfluList= new List<CampaignInfluence>();
+        //fetching all opportunity id and storing it in list<string>
+        List<String> oppIdList = new List<String>();
+
+        //Reading Parent Opportunities of UnicaId is Not Null
+        if(!clonedOppMap.isEmpty()){
+            parentOpptyList = OpportunityTriggerUtility.getParentOppList(clonedOppMap);
+
+            //  preparing campaignInsertList for associating campaigns to cloned opportunity
+            if(!parentOpptyList.isEmpty()){
+
+                for(Opportunity opp : parentOpptyList){
+                    oppIdList.add(opp.Id);
+                }
+                // Reading Parent opportunities Campaign records and associating campaigns to cloned Opportunities
+                for(CampaignInfluence campInfluRec : OpportunityTriggerUtility.getCampInfluenceList(oppIdList)){
+                    System.debug('L3 Testing 2700360 CampaignInfluence Inside for loop');
+                    if(clonedOppMap.get(campInfluRec.OpportunityId )!=null && campInfluRec.Campaign.Unica_ID__c != ''){
+                        CampaignInfluence campInfluNewRec= new CampaignInfluence (OpportunityId = clonedOppMap.get(campInfluRec.OpportunityId ), CampaignId = campInfluRec.CampaignId, ModelId= campInfluRec.ModelId);
+                        insertCapInfluList.add(campInfluNewRec);
+                    }
+                }
+            }
+        }
+        if(!genesisOppMap.isEmpty()){
+            // Reading Associated/Parent opportunities Campaign records and associating to new Opportunities
+            for(CampaignInfluence campInfluRec: OpportunityTriggerUtility.getCampInfluenceList(genesisOppMap.values())){
+                for(id oppty : genesisOppMap.keyset()){
+                    CampaignInfluence camInfluNewRec = new CampaignInfluence (OpportunityId = oppty, CampaignId = campInfluRec.CampaignId, ModelId= campInfluRec.ModelId);
+                    insertCapInfluList.add(camInfluNewRec);
+                }
+            }
+        }
+
+        if(!insertCapInfluList.isEmpty()){
+            // Creating Associated campaigns of Cloned and genesis trial opportunities
+            insert insertCapInfluList;
+        }
+        
+    }
+
+
+
+    /*********************************************************************************************************************
+* Call From    : before insert and before update
+* Parameters   : List of Opportunities
+* return       : Void
+* Action       : Update the legal entity account on opportunity based on the conditions(tr_LegalEntityCheckOnAccount)
+*********************************************************************************************************************/
+    public static void performLegalEntity(List<opportunity> oppLegalEntityList,Set<Id> oppAccountId){
+
+        System.debug('L3 Testing 2700360 performLegalEntity Inside for loop');
+        //get all the account and parent account records
+        Map<Id,Account> oppAccountRecords = OpportunityTriggerUtility.getOpportunityAccountRecords(oppAccountId);
+        for(opportunity oppUpdate : oppLegalEntityList){
+            //account records of current opportunity
+            account oppAccount = oppAccountRecords.get(oppUpdate.AccountId);
+            //Checks if the account associated is not legal entity and is associated with parent account
+            if(oppAccount.Parentid != null && !oppAccount.Legal_Entity__c) {
+                
+                // checks if the parent account is legal entity and account's "Thunderhead Country"
+                //value is same as parent account's "Thunderhead Country"
+                if(oppAccount.Parent.Legal_Entity__c && oppAccount.tfCrmCountry__c == oppAccount.Parent.tfCrmCountry__c){
+                    
+                    //Update "Original Account " and opportunity account
+                    oppUpdate.AccountAssociatedWith__c = oppAccount.Id;
+                    oppUpdate.AccountId=oppAccount.Parent.Id;
+                    oppUpdate.Is_LE_Associated__c = true;
+                    //checks if account'currency is same as parent account cuureny
+                    if(oppAccount.CurrencyIsoCode != oppAccount.Parent.CurrencyIsoCode){
+                        //Update opportunity "Account currency"
+                        oppUpdate.CurrencyIsoCode = oppAccount.Parent.CurrencyIsoCode;
+                    }
+                }
+                //if parent account is not legal entity
+                else {
+                    oppUpdate.Opportunity_Updated__c = true;
+                    oppUpdate.AccountAssociatedWith__c = null;
+                }
+            } 
+            //263 code change by sibatri
+             else if(oppAccount.Legal_Entity__c && oppUpdate.AccountAssociatedWith__c != null ){
+                 //&& oppAccount.Parent.Id==null
+                 oppUpdate.Opportunity_Updated__c = true;
+             }
+            //263 code change by sibatri
+            //if associated account is not legal entity,then the below is perfomred
+            else {
+                oppUpdate.Opportunity_Updated__c = true;
+                oppUpdate.AccountAssociatedWith__c = null;
+            }
+        }
+        
+    }
+
+    /*********************************************************************************************************************
+* Call From    : After insert
+* Parameters   : set of opportunity account id's
+* return       : Void
+* Action       : Update the opportunity team members
+*********************************************************************************************************************/
+
+    public static void updateOpportunityTeamMembers(Set<Id> oppAccountIds ,List<Opportunity> newOpportunityList){
+        System.debug('L3 Testing 2700360 updateOpportunityTeamMembers Inside');
+        Map<Id, List<Custom_Account_Team__c>> mapAccIdWithListOfCAT = new Map<Id, List<Custom_Account_Team__c>>();
+        List<Custom_Account_Team__c> tempCustomAccountTeam;
+        List<OpportunityTeamMember> listOpportunityTeamMember = new List<OpportunityTeamMember>();
+        //fetch custom account team deatils
+        List<Custom_Account_Team__c> listCustomAccountTeam = OpportunityTriggerUtility.getCustomAccountTeamList(oppAccountIds);
+        //iterate for each custom account team
+        for(Custom_Account_Team__c currentCustomAccountTeam : listCustomAccountTeam){
+            if(!mapAccIdWithListOfCAT.containsKey(currentCustomAccountTeam.Account__r.id)){
+                tempCustomAccountTeam = new List<Custom_Account_Team__c>();
+            }else{
+                tempCustomAccountTeam = new List<Custom_Account_Team__c>(mapAccIdWithListOfCAT.get(currentCustomAccountTeam.Account__r.id));
+            }
+            tempCustomAccountTeam.add(currentCustomAccountTeam);
+            mapAccIdWithListOfCAT.put(currentCustomAccountTeam.Account__r.id,tempCustomAccountTeam);
+        }
+
+        //
+        if(!mapAccIdWithListOfCAT.isEmpty()){
+            OpportunityTeamMember opportunityTeamMember;
+            for(Opportunity currentOpportunity : newOpportunityList){
+                if(mapAccIdWithListOfCAT.containskey(currentOpportunity.AccountId)){
+                    List<Custom_Account_Team__c> temporaryCustomAccTeam = mapAccIdWithListOfCAT.get(currentOpportunity.AccountId);
+                    for(Custom_Account_Team__c currentCustomAccountTeam : temporaryCustomAccTeam){
+                        opportunityTeamMember = new OpportunityTeamMember();
+                        opportunityTeamMember.OpportunityId = currentOpportunity.id;
+                        opportunityTeamMember.UserId = currentCustomAccountTeam.Team_Member__c;
+                        opportunityTeamMember.TeamMemberRole  = 'Client Specialist';
+                        listOpportunityTeamMember.add(opportunityTeamMember);
+
+                    }
+                }
+            }
+            if(!listOpportunityTeamMember.isEmpty()){
+                insert listOpportunityTeamMember;
+            }
+        }
+        
+    }
+
+    /*********************************************************************************************************************
+* Call From    : before update
+* Parameters   : List of Opportunities, Sap to check Field status, List of SAP Startegy opportunity
+* return       : Void
+* Action       : Update the feilds of SAP Strategic Opportunity based on the conditions(updateStrategy)
+*********************************************************************************************************************/
+
+    public static void genStrategyOppUpdate(List<Opportunity> oppLst,List<SAP_Strategic_Opportunity__c> statOpp,Map<Id,Sobject> oldItems){
+
+        System.debug('L3 Testing 2700360 genStrategyOppUpdate Inside');
+        //Map to obtain results of comparison using isFieldChanged Method
+        Map<String,Boolean> mapFieldChangeStatus = new Map<String,Boolean>();
+
+        //To check the Valued changed using isFiledchnaged
+        List<string> oppFieldList = new List<string>{'StageName','tocMonthlyRecurring__c','tfcrmOneTimeRevenue__c'};
+
+            //Iterate Over the List opportunities which doesn't have GRC/Genesis Flags as TRUE
+            for(Opportunity opp :oppLst){
+                opportunity oldOpportunity = (opportunity)oldItems.get(opp.Id);
+
+                //This map will have the status of field changed i.e, wether it is updated or not
+                mapFieldChangeStatus = TriggerUtility.isFieldChanged(opp,oldOpportunity,oppFieldList);
+
+                if(mapFieldChangeStatus.get('StageName') ||mapFieldChangeStatus.get('tocMonthlyRecurring__c')
+                   ||mapFieldChangeStatus.get('tfcrmOneTimeRevenue__c')  &&(opp.Genesis_Flag__c == 'False')){
+
+                       //Iteration over List of SAP Strategic oppty records
+                       for(SAP_Strategic_Opportunity__c statOpps:statOpp){
+
+                           //Initialise Common fileds to NULL
+                           statOpps.Pipeline_Monthly_Recurring_Revenue__c = null;
+                           statOpps.Pipeline_One_Time_Revenue__c = null;
+                           statOpps.Lost_Monthly_Recurring__c = null;
+                           statOpps.Lost_One_Time_Revenue__c = null;
+                           statOpps.Won_Monthly_Recurring__c = null;
+                           statOpps.Won_One_Time_Revenue__c = null;
+
+                           //Check if the opportunity stage is between 1-5
+
+                           if(opp.StageName == Label.Opportunity_Stage_1  || opp.StageName ==Label.Opportunity_Stage_2
+                              || opp.StageName==Label.Opportunity_Stage_3|| opp.StageName ==Label.Opportunity_Stage_4
+                              || opp.StageName ==Label.Opportunity_Stage_5){
+
+                                  //Update the pipeline Fields of Strategy Opportunity
+                                  statOpps.Pipeline_Monthly_Recurring_Revenue__c = opp.tocMonthlyRecurring__c;
+                                  statOpps.Pipeline_One_Time_Revenue__c = opp.tfcrmOneTimeRevenue__c;
+
+                              }else if(opp.StageName == Label.Opportunity_Stage_6 || opp.StageName == Label.Opportunity_Stage_7){
+
+                                  //Update the won Fields of Strategy Opportunity
+                                  statOpps.Won_Monthly_Recurring__c = opp.tocMonthlyRecurring__c;
+                                  statOpps.Won_One_Time_Revenue__c = opp.tfcrmOneTimeRevenue__c;
+
+                              }else if(opp.StageName == Label.Opportunity_Stage_8){
+
+                                  //Update the lost Fields of Strategy Opportunity
+                                  statOpps.Lost_Monthly_Recurring__c = opp.tocMonthlyRecurring__c;
+                                  statOpps.Lost_One_Time_Revenue__c = opp.tfcrmOneTimeRevenue__c;
+                              }
+                       }
+
+                       if(statOpp != Null){
+                           update statopp;
+                           
+
+                       }
+                   }
+            }
+            
+    }
+
+    /*********************************************************************************************************************
+* Call From    : After update
+* Parameters   : List of new opportunities
+* return       : Void
+* Action       : Update the Expected Revenue Date on opportunity(ExpectedRevSS7)
+*********************************************************************************************************************/
+    public static void updateOpportunityBillStartDate (Map<Id,Decimal> oppRecurringRevMap, Map<Id,Opportunity> oppMap){
+
+        System.debug('L3 Testing 2700360 updateOpportunityBillStartDate Inside');
+        // Map of Oppty Id, and Bill start Date to be stamped onto its Expected Revenue date field
+        Map<Id, Date> billStartDateMap = New Map<Id, Date>();
+        List<Opportunity> opportunityToUpdate = New List<Opportunity>();
+        // Getting the combination of Opptyid and OLI field (Bill Start Date) to be stamped on the Oppty 'Expected Revenue Date'.
+        for(Opportunitylineitem oppLineItem : OpportunityTriggerUtility.getOpptyLineItemRecords(oppRecurringRevMap)){
+            If(oppLineItem.QLI_Recurring_Total__c == oppRecurringRevMap.get(oppLineItem.Opportunityid)){
+               billStartDateMap.put(oppLineItem.Opportunityid, oppLineItem.QLI_Bill_Start_Date__c);
+            }
+        }
+
+        for(Opportunity Opptyfinal: OpportunityTriggerUtility.updateOpptyList(billStartDateMap.keySet()) ){
+            Opptyfinal.tocExpectedRevenueDate__c = billStartDateMap.get(Opptyfinal.id);
+            opportunityToUpdate.add(Opptyfinal);
+        }
+
+        try{
+            //update the opportunities
+            if(opportunityToUpdate != null && opportunityToUpdate.size()>0){
+                update opportunityToUpdate;
+            }
+        }Catch(Exception e){
+          // 
+          Genesis_System_Error_Handler__c eh = new Genesis_System_Error_Handler__c();
+          eh.name = 'ExpectedRevenueUpdateFailure_#';
+          eh.Error_Description__c = String.valueOf(e)+'. Line Number '+e.getLineNumber()+'. Cause'+e.getCause()+'. StackTraceString'+e.getStackTraceString()+'. TypeName'+e.getTypeName();
+          insert eh;
+        }
+        
+    }
+
+    /*********************************************************************************************************************
+* Call From    :After update
+* Parameters   : List of Opportunities old and new opportunities
+* return       : Void
+* Action       : Update the status Field on Quote based on the conditions of associated Opportunity Id's(triggerGenesisOpportunity)
+*********************************************************************************************************************/
+
+    public static void setQuotestoExpired(set<Id> setOpptyFinalSet,set<id> setExpiredOppty,set<id> setInProgressOppty){
+
+        System.debug('L3 Testing 2700360 setQuotestoExpired Inside');
+        //Query for quote Records assosciated with the Final set of opportunity ID's obtained
+        list<quote> quotelist = OpportunityTriggerUtility.getQuoteList(setOpptyFinalSet);
+        
+        Set<Id> setofExpiredQuoteId = new Set<Id>(); //NER-686
+        Set<Id> setofInprogressQuoteId = new Set<Id>(); //FRO-2049
+        List<ContentDocumentLink> filesListtoDel = new List<ContentDocumentLink>(); //Added for SML-696
+        List<Sobject> sobjattach = new List<Sobject>(); //Added for SML-696
+        List<QuoteFeed> listFeed = new List<QuoteFeed>(); //Added for SML-696
+        if(!quotelist.isempty()){
+            for(quote oQuote:quotelist){
+                //Update Quote status Field Based on 2 different sets of ID's created
+                if(setExpiredOppty.contains(oQuote.opportunityid)){
+
+                    
+                    oQuote.status='Expired';
+                    oQuote.ExpirationDate=system.today();
+                    setofExpiredQuoteId.add(oQuote.Id); //NER-686
+                    sobjattach.addAll((List<sObject>)oQuote.Attachments); //Added for SML-696
+                    filesListtoDel.addAll(oQuote.ContentDocumentLinks); //Added for SML-696
+                    listFeed.addAll(oQuote.Feeds);
+                    OpptyStageController.delFlag = true;
+                }
+                else{
+                    
+                    oQuote.status='In Progress';
+                    oQuote.ExpirationDate=system.today().addDays(30);
+                    setofInprogressQuoteId.add(oQuote.Id);//NER-2049
+                }
+            }
+            //NER-686
+            
+            update quotelist;
+            //sfcf-732
+            list<Approval.ProcessWorkItemRequest> listNewApprovalItem = new List<Approval.ProcessWorkItemRequest>();
+            If(!setofExpiredQuoteId.isEmpty())
+            {
+                ProcessInstanceWorkitem[] piWorkItems = [SELECT Id FROM ProcessInstanceWorkItem WHERE ProcessInstance.TargetObjectId = :setofExpiredQuoteId
+                AND ProcessInstance.Status = 'Pending'];
+                
+                if(piWorkItems.size() > 0)
+                    {
+                        for(ProcessInstanceWorkitem piw:piWorkItems)
+                        {
+                        
+                        Approval.ProcessWorkItemRequest pwiRequest = new Approval.ProcessWorkItemRequest(); 
+                        pwiRequest.setAction('Removed'); 
+                        pwiRequest.setComments('Auto recalled due to quote expiry and closed opportunity.'); 
+                        pwiRequest.setWorkItemId(piw.Id);
+                        listNewApprovalItem.add(pwiRequest);                        
+                        }
+                    }
+                    
+                list<Approval.ProcessResult> result = Approval.process(listNewApprovalItem);
+
+            }
+            //sfcf-732
+            //NER-686- Start
+            List<QuoteLineItem> listToExpireInprogressQLI = [SELECT Id,quoteid,oli_status__c,Quote_Status__c,Quote.Order_Type__c,Cancelled_LineItem__c,Is_Cancelled_For_RPT__c,Is_RPT__c,Genesis_Flag__c,Retract_Line_Item__c,Retract_Pending_Install__c,Asset__c,Asset__r.Quantity,Quantity FROM QuoteLineItem WHERE quoteid IN: setofExpiredQuoteId OR quoteid IN: setofInprogressQuoteId];
+            
+            List<QuoteLineItem> listOfExpiredQLI = new List<QuoteLineItem>();
+            List<QuoteLineItem> listOfInprogressQLI = new List<QuoteLineItem>();//FRO-2049
+            
+            If(!listToExpireInprogressQLI.isEmpty())
+            {
+                for(QuoteLineItem qli : listToExpireInprogressQLI)
+                {
+                   if (qli.Quote_Status__c == 'In Progress'){
+       if((qli.Quote.Order_Type__c !='Retraction' && qli.Quote.Order_Type__c !='Renegotiation Price and Terms' && qli.Is_Cancelled_For_RPT__c == false && qli.Cancelled_LineItem__c == false) || qli.Genesis_Flag__c.equalsIgnoreCase('False') ){
+                        qli.oli_status__c = 'In Progress';
+                        listOfInprogressQLI.add(qli); 
+                        }                       
+                    } else{
+                    qli.oli_status__c = 'Expired';
+                    listOfExpiredQLI.add(qli);
+                    }
+                }
+                update listOfExpiredQLI;
+                
+                // Update the list of QLis for FRO-2049
+                if (!listOfInprogressQLI.isEmpty())
+                    {
+                    update listOfInprogressQLI;
+                    }
+                // end FRO-2049
+            }
+
+            
+            //Delete the Files in Lightning: SML-696
+            if (!filesListtoDel.isEmpty())
+            {
+                List<ContentDocumentLink> filteredList = AttachmentFileWrapper.filterFeedAttachments(listFeed,filesListtoDel);
+                sobjattach.addAll((List<sObject>)filteredList);
+            }
+            if (!sobjattach.isEmpty())
+            {
+                Delete sobjattach;
+            }
+            List<Contract> con = [Select Id, Quote_ID1__c from Contract where Quote_ID1__c IN: setofExpiredQuoteId];
+            if (!con.isEmpty())
+            {
+                Delete con;
+            }
+            //NER-686- End
+        }// end of if loop
+        
+    }
+
+
+    public static void resurrectExpiredQuotes(List<String> expiredQuoteList) {
+        System.debug('L3 Testing 2700360 resurrectExpiredQuotes Inside');
+        List<SBQQ__Quote__c> expiredQuotes = [
+            Select id, Quote_Valid_to__c
+            from SBQQ__Quote__c
+            where SBQQ__Status__c = 'Expired' and id in:expiredQuoteList
+        ];
+        if(expiredQuoteList.isEmpty()) {
+            return;
+        }
+        for(SBQQ__Quote__c expiredQuote:expiredQuotes) {
+            expiredQuote.SBQQ__Status__c = 'In Progress';
+            if(expiredQuote.Quote_Valid_to__c==null || expiredQuote.Quote_Valid_to__c<System.today()) {
+                expiredQuote.Quote_Valid_to__c = System.today().addDays(30);
+            }
+            else {
+                expiredQuote.Quote_Valid_to__c = expiredQuote.Quote_Valid_to__c.addDays(30);
+            }
+        }
+        update expiredQuotes;
+    }
+
+
+
+    /*********************************************************************************************************************
+* Call From    : After update
+* Parameters   : List of old and New oppty,Old map of oppty
+* return       : Boolean
+* Action       : Update OpportunityLineItem currency(triggerOpportunity)
+*********************************************************************************************************************/
+    public static void compareAccountsAndUpdateProductCurrency(List<Opportunity> newOpportunity,Map<Id, Opportunity> oldOpptyMap,Set<Id> accId){
+        System.debug('L3 Testing 2700360 compareAccountsAndUpdateProductCurrency Inside');
+        Map<Id, Opportunity> revCurOpptyMap = new Map<Id, Opportunity>();
+        Map<Id,Opportunity> newOpptyMap = new Map<Id, Opportunity>();
+        Map<Id,list<OpportunityLineItem>> OpptyProdIdMap = new Map<Id,list<OpportunityLineItem>>();
+        List<OpportunityLineItem> optyProd = new List<OpportunityLineItem>();
+
+        if(!accId.isempty()){
+            if(userinfo.getName() != 'Siebel EAI' && UserInfo.getName()!= Label.SAP_user){
+                Map<Id,Account> accMap = OpportunityTriggerUtility.getAccountcurrency(accId);
+                for(Opportunity oppty: newOpportunity){
+                    Account oppAccount = accMap.get(oppty.AccountId);
+                    if(oldOpptyMap.get(oppty.Id).AccountId != oppty.AccountId && oppty.trActiveQuoteInd__c == false && oppty.StageName != Label.Opportunity_Stage_6 && oppty.StageName != Label.Opportunity_Stage_7 && oppty.StageName != Label.Opportunity_Stage_8){
+                        //compare old and new oppty Currency,if it's equal build newOpptyMap
+                        if(oppAccount.CurrencyIsoCode == accMap.get(oldOpptyMap.get(oppty.Id).accountId).CurrencyIsoCode){
+                            newOpptyMap.put(oppty.id, oppty);
+                        }
+                        //compare old and new oppty Currency,if it's Not equal build revCurOpptyMap
+                        if(oppAccount.CurrencyIsoCode != accMap.get(oldOpptyMap.get(oppty.Id).accountId).CurrencyIsoCode){
+                            revCurOpptyMap.put(oppty.Id, oppty);
+                        }
+                    }
+                }
+            }
+
+            List<OpportunityLineItem> updateOppProducts = new List<OpportunityLineItem>();
+            if(!OpportunityTriggerUtility.getOppLineitemList(newOpptyMap,revCurOpptyMap).isEmpty()){
+                TriggerHandlingOfOpportunityProduct.isExecuted = true;
+                //Iterate over Oppty LineItems
+                for(OpportunityLineItem opPd : OpportunityTriggerUtility.getOppLineitemList(newOpptyMap,revCurOpptyMap)){
+                    boolean isexist = false ;
+                    //update Oli Install to with Accountid
+                    if(revCurOpptyMap.get(opPd.OpportunityId)!= null ){
+                        opPd.Install_To__c = revCurOpptyMap.get(opPd.OpportunityId).accountId;
+                        opPd.tfcrmProposedPriceMonthly__c = 0;
+                         opPd.tfcrmOldPriceMonthly__c = 0;
+                        //opPd.tocOneTimeUnitPrice__c = 0;
+                        isexist = true ;
+                    }
+                    if(newOpptyMap.get(opPd.OpportunityId) != null ){
+                        opPd.Install_To__c = newOpptyMap.get(opPd.OpportunityId).accountId;
+                        isexist = true ;
+                    }
+                    if(isexist == true){
+                        updateOppProducts.add(opPd);
+                    }
+                }
+                if(updateOppProducts.size() > 0 ){
+                    update  updateOppProducts;
+                }
+            }
+        }
+        
+    }
+    /*********************************************************************************************************************
+* Call From    : After insert
+* Parameters   : List of old and New oppty,Old map of oppty
+* return       : void
+* Action       : Update Ultimate_Parent_Opportunity__c,tocGSCSMonthlyRecurring__c,tocGSCSOneTimeRevenue__C(UpdateAssociatedOppty)
+*********************************************************************************************************************/
+    public static void opptyAssociationUltimateParent(Set<Id> oportunityLists){
+        System.debug('L3 Testing 2700360 opptyAssociationUltimateParent Inside');
+        List<Opportunity> updateOpptyList = new List<Opportunity>();
+        List<Opportunity> finalOpptyList = new List<Opportunity>();
+        List<Opportunity> associateOpty=new List<Opportunity>();
+        Map<Id,Id> ultimateParentMap = new Map<Id,Id>();
+        Map<Id,Id> mapAssociateId = new Map<Id,Id>();
+
+        System.debug('L3 Testing 2700360 OpportunityTriggerUtility.updateOpptyList START');
+        List<Opportunity> oppToBeProcessed = OpportunityTriggerUtility.updateOpptyList(oportunityLists);
+        System.debug('L3 Testing 2700360 OpportunityTriggerUtility.updateOpptyList END');
+            //creating map of opportunity id and Associated_Id__c
+            for(Opportunity opp : oppToBeProcessed){
+
+                mapAssociateId.put(opp.id, opp.Associated_Id__c);
+            }
+
+        //
+        //to fetch ultimate parent of Associated_Id__c
+        if(!mapAssociateId.isEmpty()){
+            ultimateParentMap = OpportunityTriggerUtility.mapAssociateId(mapAssociateId.values());
+        }
+        //
+        for(Opportunity oportunity : oppToBeProcessed){
+            if(oportunity.Associated_Id__c!= null && oportunity.Associated_Id__c!=''){
+                oportunity.Associated_Opportunity__c=oportunity.Associated_Id__c;
+            }
+            //oportunity.Ultimate_Parent_Opportunity__c = oportunity.Associated_Opportunity__r.Ultimate_Parent_Oportunity__c;
+            if(!ultimateParentMap.isEmpty()){
+                
+                string associatedId = mapAssociateId.get(oportunity.Id);
+                
+
+                if(ultimateParentMap.containsKey(associatedId)){
+                    
+                    oportunity.Ultimate_Parent_Opportunity__c = ultimateParentMap.get(associatedId.left(15));
+                }
+            }
+            oportunity.tocGSCSMonthlyRecurring__c= 0;
+            oportunity.tocGSCSOneTimeRevenue__C = 0;
+            finalOpptyList.add(oportunity);
+
+        }
+        try{
+            
+            if(finalOpptyList.size()>0){
+                System.debug('L3 Testing 2700360 OpportunityTriggerUtility finalOpptyList START');
+                update finalOpptyList;
+                System.debug('L3 Testing 2700360 OpportunityTriggerUtility finalOpptyList END');
+            }
+        }
+        catch(Exception ex){
+            system.debug ('$$$exception'+ex);
+        }
+        
+    }
+    /*********************************************************************************************************************
+* Call From    : After Update
+* Parameters   : List of old and New oppty,Old map of oppty
+* return       : void
+* Action       : Update Ultimate_Parent_Opportunity__c,Net_GSAM_Reccurring_Calculation__c,Net_GSAM_One_Time_Calculation__c
+*               (GenesisPipelineManagement.netGsamCalculation)(UpdateNetGSAMForUltimateParentOpportunity)
+*********************************************************************************************************************/
+    public static void netGsamCalculation(Set<String> accountIdSet, set<String> setUltimateParent,set<String> setUltimateParentId,Map<String,String> opportunityMap){
+        System.debug('L3 Testing 2700360 netGsamCalculation Inside');
+        set<string> hierarchyAccount =new set<String>();
+        set<string> finalAccontIdSet = new set<string>();
+        List<Opportunity> selfServeOppList = new List<Opportunity>();
+
+        try{
+            if(!accountIdSet.isEmpty()){
+                List<Account> accList= new List<Account>();
+
+                accList = OpportunityTriggerUtility.getAccountList(accountIdSet);
+
+                if(accList != null && accList.size() > 0){
+                    for(Account acc : accList){
+                        //if Account's Ultimate Parent Account is not null
+                        if(acc.Ultimate_Parent_Account__c!= null){
+                            finalAccontIdSet.add(acc.Ultimate_Parent_Account__c);
+                            finalAccontIdSet.addAll(accountIdSet);
+                            hierarchyAccount.add(acc.Ultimate_Parent_Account__c);
+                        }
+                        if(acc.Parentid!=null){
+                            finalAccontIdSet.add(acc.Parentid);
+                        }else{
+                            finalAccontIdSet=accountIdSet;
+                            hierarchyAccount.addAll(accountIdSet);
+                        }
+                    }
+                    //fetching id where Ultimate_Parent_Account__c :hierarchyAccount
+                    for (Account currentAccount : OpportunityTriggerUtility.getAccountsList(hierarchyAccount)){
+                        finalAccontIdSet.add(currentAccount.id);
+                    }
+                    
+                    for(Opportunity op : [Select id, Self_Serve_Order__c from Opportunity where id IN :(setUltimateParent)]){
+                        if(op.Self_Serve_Order__c == TRUE){
+                        selfServeOppList.add(op);
+                        }
+                    }
+                    
+                    if(!finalAccontIdSet.isEmpty() && selfServeOppList.isEmpty()){
+                        
+                        GenesisPipelineManagement.netGsamCalculation(setUltimateParent,opportunityMap,finalAccontIdSet, setUltimateParentId);
+                        
+                    }
+                    if(!finalAccontIdSet.isEmpty() && !selfServeOppList.isEmpty()){
+                        
+                        GenesisPipelineManagement.netGsamCalculation_Relocation(setUltimateParent,opportunityMap,finalAccontIdSet, setUltimateParentId);
+                        
+                        
+                    }
+                }
+            }//end of accountlist size check
+         }catch(exception ex)  {
+            system.debug ('$$$exception'+ex);
+         }
+         
+    }
+    
+    
+/*********************************************************************************************************************
+* Call From    : After Update
+* Parameters   : opportunity 
+* return       : void
+* Purpose      : Case Update Close No Order
+*********************************************************************************************************************/
+    public static void CreateAndUpdateCase(Opportunity oppty){
+         System.debug('L3 Testing 2700360 CreateAndUpdateCase Inside'); 
+         List< case > UpdateCase = new List <case>(); 
+         List<Messaging.SingleEmailMessage> mails =  new List<Messaging.SingleEmailMessage>();
+                                     
+         Group pacOMSQueue = [select
+                                     Id,
+                                     name,Email
+                                     from
+                                     Group
+                                     where
+                                     Type = 'Queue'
+                                     AND
+                                     NAME='Refinitiv Access OMS TEAM'];
+       List<GroupMember> pacOMSQueueMembers = [Select UserOrGroupId From GroupMember where GroupId =:pacOMSQueue.id];   
+    Messaging.SingleEmailMessage mail =  new Messaging.SingleEmailMessage();
+    List<String> toAddresses = new List<String>();
+    List<Id> toObject = new List<Id>();
+    List<User> userList = [SELECT Id, Name, Email, isActive, Profile.Name, userrole.name, usertype 
+                 FROM User 
+                 WHERE Id IN (SELECT userorgroupid FROM groupmember WHERE GroupId =:pacOMSQueue.id)];
+      for(User u : userList){           
+      toAddresses.add(u.email);
+      toObject.add(u.id);
+      }
+      
+                
+      List< case > CaseDetails = [Select id,AccountId,status,CaseNumber,Description,Customer_Document_Number__c from case 
+                                                     where  CPQ_Quote__c = : oppty.SBQQ__PrimaryQuote__c] ;
+                        
+        Account Acc = [select Name from Account where Id = : oppty.AccountId];
+        SBQQ__Quote__c quo= new SBQQ__Quote__c();
+        if(!Test.isrunningTest()){
+            quo = [select Bill_Effective_Date__c,Name from SBQQ__Quote__c where Id = : oppty.SBQQ__PrimaryQuote__c];
+        }else{
+            quo = [select Bill_Effective_Date__c,Name from SBQQ__Quote__c limit 1];
+        }
+          
+                  if(!CaseDetails.isEmpty() && CaseDetails.size() > 0){
+                                         for (case ca : CaseDetails){                                                                              
+                       
+                                              if(oppty.StageName == Label.Opportunity_Stage_8){
+                        ca.status = 'Cancelled';
+                                                ca.Description=+Date.today().format()+' The Refinitiv Access deal that was in negotiations has been set to Closed/Lost. This case has been cancelled by the system as a result and no further action is required".'+'\n'+CaseDetails[0].Description;
+                          UpdateCase.add(ca);
+                                                    
+                        //mail.setTemplateID('00X3C000000fNaQ');
+                        mail.setSubject('Refinitiv Access Deal for ' +Acc.Name+ ' has been set to Closed/Lost');
+                        mail.setPlainTextBody('The Refinitiv Access deal that was in negotiations has been set to Closed/Lost. This case has been cancelled by the system as a result and no further action is required. Details as follows:'+'\n'+'\n'+'\n'+'Case Number: ' +ca.CaseNumber+'\n'+'\n'+'Account Name: '+Acc.Name);
+                                                
+                                                    
+                        }
+                        
+                        }                                        
+                                    }
+                    if(!UpdateCase.isEmpty()){
+                    
+                                              TriggerUtility.objectNames.add('Opportunity');
+                      Update UpdateCase;
+                      
+                                    
+                                    mail.setToAddresses(toAddresses); 
+                      mail.setTargetObjectId(toObject[0]);
+                  mail.setTreatTargetObjectAsRecipient(false);
+                    mail.setReplyTo('noreply@salesforce.com');
+                      mail.setSenderDisplayName('Email Notification');
+                    mails.add(mail);
+   
+                                      if(mails.size()>0 && !test.isRunningTest())  {  
+                                    Messaging.sendEmail(mails);
+                                    
+                                      }
+                                      }
+                         
+     
+  }
+    /*********************************************************************************************************************
+* Call From    : After Insert
+* Parameters   : List of Opportunities
+* return       : Void
+* Action       : Update opportunity Partner Role with associated Account Partner Role
+*********************************************************************************************************************/
+    public static void OpportunityToAccountPartnerUpdate(list<Opportunity> oppList,Set<Id> partnerAccountSet){
+        System.debug('L3 Testing 2700360 OpportunityToAccountPartnerUpdate Inside');
+        //if(!accountIds.isEmpty()){
+        list<Account> acctToUpdate = new list<Account>();
+        Map<Id,Account> acctRoleMap = OpportunityTriggerUtility.getaccountPartnerRoleMap(partnerAccountSet);
+        if(!acctRoleMap.isEmpty()){
+            for(Opportunity oppRec : oppList) {
+                if(oppRec.Partner_Role__c != null && oppRec.Partner_Account__c != null && oppRec.Partner_Role__c != 'Direct') {
+                    if(acctRoleMap.containskey(oppRec.Partner_Account__c) && acctRoleMap.get(oppRec.Partner_Account__c).Partner_Role__c == null) {
+                        acctRoleMap.get(oppRec.Partner_Account__c).Partner_Role__c = oppRec.Partner_Role__c;
+                        acctToUpdate.add(acctRoleMap.get(oppRec.Partner_Account__c));
+                    }
+                }
+            }
+            if(acctToUpdate.size()>0){
+                update acctToUpdate;
+            }
+        }
+        
+    }
+    /*********************************************************************************************************************
+* Call From    : After Insert
+* Parameters   : Set of AssociatedOpportunityIds
+* return       : Void
+* Action       : Create Opportunity Team Members(copySalesTeamFromTrial)
+*********************************************************************************************************************/
+    public static void CreateOppTeamMembers (Set<Id> oppAssociatedIdSet,Map<String,String> oppAssociatedOppMap){
+        System.debug('L3 Testing 2700360 CreateOppTeamMembers Inside');
+        //Initialize variables
+        Map<String,List<OpportunityTeamMember>> multipleOppIdOppTeam =new map<string,List<OpportunityTeamMember>>();
+        List<OpportunityTeamMember> updateSalesTeam = new List<OpportunityTeamMember>();
+        List<OpportunityTeamMember> oppTeamUpdateList = new List<OpportunityTeamMember>();
+        //Fetch all the TeamMembers of AssociatedOpportunity.
+        updateSalesTeam = OpportunityTriggerUtility.getTeamMembers(oppAssociatedIdSet);
+        //Iterate through each teammembers.
+        for(OpportunityTeamMember otm: updateSalesTeam){
+            if(!multipleOppIdOppTeam.containsKey(otm.Opportunityid)){
+                //Create a map of AssociatedId and its related TeamMembers
+                multipleOppIdOppTeam.put(otm.Opportunityid, new List<OpportunityTeamMember>());
+            }
+            multipleOppIdOppTeam.get(otm.Opportunityid).add(otm);
+        }
+        //Iterate through each AssociatedOpportunities
+        for(String associatedOpp : multipleOppIdOppTeam.keyset()){
+            //Iterate through each TeamMembers of the AssociatedOpps
+            for(OpportunityTeamMember oppTeam : multipleOppIdOppTeam.get(associatedOpp)){
+                //Get the AssociatedId
+                String associatedOppId =associatedOpp.substring(0,15);
+                //Get the corresponding OpportunityId
+                String Oppid = oppAssociatedOppMap.get(associatedOppId);
+                OpportunityTeamMember createOppTeam = new OpportunityTeamMember(Opportunityid = Oppid,TeamMemberRole=oppTeam.TeamMemberRole,Userid=oppTeam.Userid);
+                //Create a list for adding TeamMembers
+                oppTeamUpdateList.add(createOppTeam);
+            }
+        }
+        if(!oppTeamUpdateList.isEmpty()){
+            //Insert the List.
+            if(!Test.isRunningTest()){
+                try{
+                    insert oppTeamUpdateList;
+                    
+                }
+                catch(exception e){
+                    
+                }
+            }
+        }
+        
+    }
+    /*********************************************************************************************************************
+* Call From    : Before Insert
+* Parameters   : List of AssociatedOpportunities
+* return       : Void
+* Action       : PopulateValues from AssociatedOpportunity(setPoolTeamLeader)
+*********************************************************************************************************************/
+    public static void PopulateAssociatedOppValuestoOpportunity(List<Opportunity> lstOppWithForAssociatedOpps,Set<Id> setParentOpp){
+        System.debug('L3 Testing 2700360 PopulateAssociatedOppValuestoOpportunity Inside');
+        Map<Id,Opportunity> associatedOppdetails = new  Map<Id,Opportunity>();
+        for(Opportunity associatedOpps: [SELECT Id,Multi_Campaigns__c,Lead_Source_Most_Recent__c,Secondary_Lead_Source_Most_Recent__c
+                                         FROM Opportunity
+                                         WHERE id IN :setParentOpp]){
+                                             associatedOppdetails.put(associatedOpps.Id,associatedOpps);
+                                         }
+        for(Opportunity currentOppDetails :lstOppWithForAssociatedOpps){
+            Opportunity associatedOpp = associatedOppdetails.get(currentOppDetails.Associated_Id__c);
+            //
+            if(associatedOpp.Multi_Campaigns__c != null && associatedOpp.Multi_Campaigns__c != '') {
+                currentOppDetails.Multi_Campaigns__c = associatedOpp.Multi_Campaigns__c ;
+            }
+            //Check if the Associated Opportunity's LeadSourceMostRecent,SecondaryLeadSourceMostRecent field has any change with the
+            // Opportunity's LeadSourceMostRecent and SecondaryLeadSourceMostRecent fields.
+            if(associatedOpp.Lead_Source_Most_Recent__c != currentOppDetails.Lead_Source_Most_Recent__c){
+                if(associatedOpp.Secondary_Lead_Source_Most_Recent__c != currentOppDetails.Secondary_Lead_Source_Most_Recent__c){
+                    currentOppDetails.addError(Label.OpportunityLeadSourceError);
+                }else{
+                    currentOppDetails.addError(Label.OpportunityRecentLeadSourceError);
+                }
+            }
+            else if( associatedOpp.Secondary_Lead_Source_Most_Recent__c != currentOppDetails.Secondary_Lead_Source_Most_Recent__c) {
+                currentOppDetails.addError(Label.OpportunitySecondaryLeadError);
+            }
+            //Check for TFIntegration user
+            /* GTT-2608 
+            if(UserInfo.getUserName().contains(Label.TFIntegration_username)){
+                //Check for the Opportunity Type 'Pre-pipeline'
+                if(currentOppDetails.tfcrmType__c == 'Pre-pipeline') {
+                    //Check if the Opportunity Lead source has any value
+                    if(currentOppDetails.LeadSource != null && currentOppDetails.LeadSource != '') {
+                        //Populate the value to LeadSourceMostRecent field
+                        currentOppDetails.Lead_Source_Most_Recent__c = currentOppDetails.LeadSource;
+                    }
+                    //Check if the SecondaryLeadSource has any value.
+                    if(currentOppDetails.Secondary_Lead_Source_2__c != null && currentOppDetails.Secondary_Lead_Source_2__c != '') {
+                        //Populate the value to SecondaryLeadSourceMostRecent field
+                        currentOppDetails.Secondary_Lead_Source_Most_Recent__c = currentOppDetails.Secondary_Lead_Source_2__c;
+                    }
+                }
+            } // --Neenu
+            */
+        }
+        
+    }
+    /*********************************************************************************************************************
+* Call From    : Before Insert
+* Parameters   : List of New opportunities,OpportunityAccountID set
+* return       : void
+* Purpose      : Update Opportunity Account Country with Account ShippingCountry (triggerOpportunity)
+*********************************************************************************************************************/
+    public static void updateOpportunityAccountCountry(List<Opportunity>currentOppList,Set<Id>accountIdSet){
+        System.debug('L3 Testing 2700360 updateOpportunityAccountCountry Inside');
+        Map<Id ,Account> accOutputMap = new Map<Id ,Account>();
+        accOutputMap = OpportunityTriggerUtility.getOpportunityAccountRecords(accountIdSet);
+        for(Opportunity oppToUpdate:currentOppList){
+             if(oppToUpdate.AccountId != null && accOutputMap.containsKey(oppToUpdate.AccountId) && accOutputMap.get(oppToUpdate.AccountId).ShippingCountry != null){
+                 oppToUpdate.tocAccount_Country__c = accOutputMap.get(oppToUpdate.AccountId).ShippingCountry;
+            }
+           
+             if(oppToUpdate.getQuickActionName() == QuickAction.NewOpportunity && oppToUpdate.AccountID != NULL)
+                
+               oppToUpdate.CurrencyIsoCode = accOutputMap.get(oppToUpdate.AccountId).CurrencyIsoCode; //GTT-1090
+               
+             if(oppToUpdate.getQuickActionName() == QuickAction.New_Cancel_Opportunity && oppToUpdate.AccountID != NULL)
+                
+               oppToUpdate.CurrencyIsoCode = accOutputMap.get(oppToUpdate.AccountId).CurrencyIsoCode; 
+                
+            
+        }
+        
+    }
+    /*********************************************************************************************************************
+* Call From    : Before Update
+* Parameters   : List of New opportunities,OpportunityAccountID set,old map of opportunities
+* return       : void
+* Purpose      : update Opportunity Currency with Account currency(triggerOpportunity)
+*********************************************************************************************************************/
+    Public static void updateOppCurrency(List<Opportunity>NewOppItems,Set<Id>accountIdSet,Map<Id,Opportunity>oldOpptyMap){
+        System.debug('L3 Testing 2700360 updateOppCurrency Inside');
+        Map<Id ,Account> accCurrencyMap = new Map<Id ,Account>();
+        accCurrencyMap = OpportunityTriggerUtility.getOpportunityAccountRecords(accountIdSet);
+        for(Opportunity oppToUpdate:NewOppItems){
+            Opportunity oldOpportunity = oldOpptyMap.get(oppToUpdate.Id);
+            //If Accid is changed,User!Siebel EAI,Active Quote Ind -false,stage not of 6/7/8 ,then update Old owner,CustOptyowner
+            oppToUpdate.CustOpptyOwner__c = oppToUpdate.OwnerId ;
+            oppToUpdate.Old_Owner__c = oppToUpdate.OwnerId;
+            //If Old oppty currency is changed ,Update opp Currency with account currency
+            //update GTM Recurring,One Time Revenue,GTM One Time to 0.
+            if(!Test.isRunningTest()){
+                if(accCurrencyMap.get(oldOpportunity.AccountId).CurrencyIsoCode != accCurrencyMap.get(oppToUpdate.AccountId).CurrencyIsoCode){
+                    oppToUpdate.CurrencyIsoCode = accCurrencyMap.get(oppToUpdate.AccountId).CurrencyIsoCode;
+                    oppToUpdate.tocGSCSMonthlyRecurring__c = 0;
+                    oppToUpdate.tfcrmOneTimeRevenue__c= 0;
+                    oppToUpdate.tocGSCSOneTimeRevenue__c= 0;
+                }
+            }
+        }
+        
+    }
+    /*********************************************************************************************************************
+* Call From    : Before Insert and Before Update
+* Parameters   : Itarating opportunity
+* return       : void
+* Purpose      : update opportunity fields based on the conditions(triggerOpportunity)
+*********************************************************************************************************************/
+    public static void updateOpportunityFields(opportunity currentOpp){
+        System.debug('L3 Testing 2700360 updateOpportunityFields Inside');
+        //update Trvertical to Unspecified if it's null
+        if( currentOpp.trVertical__c == null || currentOpp.trVertical__c == ''){
+            currentOpp.trVertical__c  = 'Unspecified' ;
+        }
+        // Update Hidden Competitor Field in Opportunity Screen
+        if  (currentOpp.Competitors__c =='' || currentOpp.Competitors__c == null){
+            currentOpp.Competitor_Name__c = null;
+        }
+        else {
+            if(currentOpp.Competitors__c =='Other Competitor'){
+                currentOpp.Competitor_Name__c = currentOpp.Other_Competitors__c ;
+            }else {
+                currentOpp.Competitor_Name__c  = currentOpp.Competitors__c.split(';', 2)[0] ;
+            }
+        }
+        // If Win/Loss Reason is â€˜Reduction in Client Staffâ€ (formerly 'Downsizing'),update competitors to No Competitor
+        if(currentOpp.tfcrmWinLossReason__c =='Reduction in Client Staff'){
+            currentOpp.Competitors__c = 'No Competitor';
+        }
+        Datetime now = Datetime.now();          
+        Integer offset = UserInfo.getTimezone().getOffset(now);               
+        Datetime local = now.addSeconds(offset/1000);
+        
+         if(currentOpp.Suppress_Approvals__c==false)        
+        {       
+                
+            currentOpp.Suppress_Approval_Justification__c='';       
+        }
+        
+    }
+    /*********************************************************************************************************************
+* Call From    : After Insert
+* Parameters   : opportunity and its ultimate parent opportunity
+* return       : void
+* Purpose      : update ultimate parent opportunity( Trigger : UpdateAssociatedOppty)
+*********************************************************************************************************************/
+    public static void processReparentList(Map<Id,Id> mapUltimateOportunity,Map<Id,Id> oldUPAndNewUPOpportunity){
+        System.debug('L3 Testing 2700360 processReparentList Inside');
+        Set<Id> rightBranchOpportunity = new Set<Id>();
+        List<Opportunity> toBeUpdatedOpties = new List<Opportunity>();
+        Set<Id> toAvoidDuplicates = new Set<Id>();
+        Integer counter = 0;
+        List<Opportunity> oldOpportunities = OpportunityTriggerUtility.getOpportunityRecords(mapUltimateOportunity.values());
+        rightBranchOpportunity.addAll(mapUltimateOportunity.keySet());
+        do{
+            for(opportunity opp: oldOpportunities){
+                if(rightBranchOpportunity.contains(opp.Associated_Opportunity__c) && (!toAvoidDuplicates.contains(opp.id))){
+                    rightBranchOpportunity.add(opp.id);
+                    toAvoidDuplicates.add(opp.id);
+                    toBeUpdatedOpties.add(new Opportunity(id = opp.id, Ultimate_Parent_Opportunity__c = oldUPandNewUPOpportunity.get(opp.Ultimate_Parent_Opportunity__c)));
+                }
+            }
+            ++counter;
+        }while(counter <= oldOpportunities.size());
+        
+        if(toBeUpdatedOpties.size()>0){
+            Database.update(toBeUpdatedOpties, FALSE);
+        }
+         
+    }
+    
+     
+     /*
+Author: Thippeswamy A
+Jira:TSV-235
+Description : Insert the OpportunityContactRole using the AccountMainsSalesContact after Opportunity Insert.
+*/
+    /* Add an additional parameter for OpportunityIDs : Jira: SFCF-996 */
+    
+    Public Static void populatePrimaryContOnOpp(Map<String, Opportunity> oppMapForPrimaryContact, Set<Id> accIds, Set<id> optyids)
+    { 
+        System.debug('L3 Testing 2700360 populatePrimaryContOnOpp Inside');
+        List<OpportunityContactRole> lstOptyContactRoles= [Select id,Opportunityid, Contactid,IsPrimary from OpportunityContactRole where Opportunityid IN:optyids and isPrimary=true limit 1];
+        
+        
+        List<OpportunityContactRole> newContactRoleList = new List<OpportunityContactRole>(); 
+        Map<String,Contact_Function__c> MapContactfunc= new Map<String,Contact_Function__c>();// dummy map to remove duplicate
+        //List<Contact_Function__c> lstContactFunc= new List<Contact_Function__c>();
+        List<OpportunityContactRole> lstOptyContRole= new List<OpportunityContactRole>();
+        List<Contact_Function__c> lstConFunc= [Select
+                                               Id,
+                                               Account_Id__c,
+                                               Contact_Id__c
+                                               From 
+                                               Contact_Function__c
+                                               Where
+                                               Account_Id__c IN:accIds
+                                               AND
+                                               Function__c='Main Sales Contact'];
+                                           
+        if(!lstConFunc.isEmpty()) {
+            for(Contact_Function__c con:lstConFunc)
+                /*Start SCI-828 changes; Date:06Sep22 
+                * Commented if and updated else to resolve Empty If Codescan error*/ 
+                /*if(MapContactfunc.containsKey(con.Account_Id__c)) {
+                }
+                else{*/
+                if(!MapContactfunc.containsKey(con.Account_Id__c)) { //End SCI-828 changes; Date:06Sep22 
+                    
+                    if(lstOptyContactRoles.isEmpty()) {
+                        if(oppMapForPrimaryContact.containsKey(con.Account_Id__c)) { 
+                            
+                            OpportunityContactRole oppContRole= new OpportunityContactRole(); 
+                            oppContRole.contactId= con.Contact_Id__c; 
+                            oppContRole.IsPrimary= true;
+                            oppContRole.OpportunityId=oppMapForPrimaryContact.get(con.Account_Id__c).id;
+                            oppContRole.Role='Decision Maker'; 
+                            lstOptyContRole.add(oppContRole); 
+                        
+                            MapContactfunc.put(con.Account_Id__c,con);
+                        } else { 
+                            lstOptyContactRoles[0].Role='Decision Maker'; 
+                            lstOptyContRole.add(lstOptyContactRoles[0]);
+                        }
+                    }
+                }
+            } 
+        if(!lstOptyContRole.isEmpty() && lstOptyContRole.size()>0)
+            
+        { 
+            upsert lstOptyContRole;
+        }
+        
+        
+    }
+    
+    // end
+    // Created as a part of TSV-235 to validate primary contact role on opportunity calling before update
+    public static void validatePrimaryContacRoleOnOpty(Map<Id, SObject> mapnewOpps, List<Opportunity> lstOpps, Map<id,Opportunity> mapOldOppValue)
+    { 
+       System.debug('L3 Testing 2700360 validatePrimaryContacRoleOnOpty Inside');
+          if(GenesisTrialConvertController.isconverted==false){
+        List<String> lstOptyds= new List<String>();  
+        Map<Id,OpportunityContactRole> mapOpptyIdContactrole= new Map<Id,OpportunityContactRole>(); // Map to store the Opportunity id and opportunitycontactrole having primary contact.
+        String  superUserProfiles= Label.Super_user_Profiles;
+        List<String> lstSuperUserProiles= superUserProfiles.split(',');
+        String opptyTypes=label.OpptyTypeToOmitPrimaryContactCheck;
+        List<String> lstOpptTypes= opptyTypes.split(',');
+        
+        //824 Start
+        Set<Id> cdmuserId=new Set<Id>();
+        Id contextUserId=UserInfo.getUserId();
+        User contextUser;
+        List<PermissionSetAssignment> cdmuseruser=new List<PermissionSetAssignment>();
+        
+        if(cdmuserId == null || cdmuserId.size()== 0){ 
+            cdmuseruser=[Select AssigneeId FROM PermissionSetAssignment WHERE PermissionSet.Name = 'Customer_Data_Management_Fields']; 
+        }
+        
+        for(PermissionSetAssignment vPSA:cdmuseruser){ 
+            cdmuserId.add(vPSA.AssigneeId); 
+        }
+        
+        if(contextUserId!=UserInfo.getUserId() || contextUser==null){ 
+            //Start SFCF-1274
+            contextUser = TriggerUtility.getUserRecord();
+            //contextUser=[Select Name,Full_Name__c,Migration_User__c from User where Id=:UserInfo.getUserId()]; 
+            //End SFCF-1274
+        }
+              
+        boolean cdmdataMigrationExp=cdmuserId.contains((Id)UserInfo.getUserId()) ? false : true;
+        //824End
+        
+        if(mapnewOpps!=null && !mapnewOpps.isEmpty()){
+        List<OpportunityContactRole> lstOptyContactRoles= [ 
+            Select
+            id,
+            Opportunityid,
+            Contactid, 
+            IsPrimary
+            from
+            OpportunityContactRole
+            where
+            Opportunityid IN: mapnewOpps.keySet()
+        ];
+        
+        List<Opportunity> lstOpprtunity= new List<Opportunity>();
+        if(!lstOptyContactRoles.isEmpty())
+        {
+            for(OpportunityContactRole oppContRole : lstOptyContactRoles){
+                if(oppContRole.IsPrimary)
+                {
+                    lstOptyds.add(oppContRole.Opportunityid);
+                    mapOpptyIdContactrole.put(oppContRole.Opportunityid,oppContRole);                   
+                }
+            }
+        } 
+        
+        }
+        for(Opportunity oppty :lstOpps)
+        {
+            if(!mapOpptyIdContactrole.containskey(oppty.id))
+            { 
+               if(!lstOpptTypes.contains(oppty.tfcrmType__c) && oppty.stagename!='1. Appointment Scheduled' && oppty.stagename!='2. Needs Analysis' && oppty.stagename!='8. Closed / No Order' && !lstSuperUserProiles.contains(userProfileName) && !oppty.IsManageAsset__c && !oppty.isConverted__c && !bypassMSCValidation && cdmdataMigrationExp)                    
+                    {
+                        oppty.addError(Label.PrimaryContactErrorMessage); 
+                    }
+                 }
+            else
+            {
+                
+                if(mapOpptyIdContactrole.containsKey(oppty.id)&& mapOldOppValue.get(oppty.Id).Primary_Contact__c != oppty.Primary_Contact__c) //Added Primary Contact condition --> CMRU-178 -- Mani.
+                    oppty.Primary_Contact__c=mapOpptyIdContactrole.get(oppty.id).contactid;
+            }
+            
+        }                        
+    }
+    }
+    // end
+    
+    // This method insert the primary opportunity contact role to the trial opty copied from the associated or parent opty
+    // This change made as a part of TSV-235
+    public static void OppContctRoleforTrialOpty(Map<Id,Id> mapIdsofParentOptyandOpty)
+    {
+        System.debug('L3 Testing 2700360 OppContctRoleforTrialOpty Inside');
+        List<OpportunityContactRole> lstOptyContRoles = new List<OpportunityContactRole>();     
+        List<OpportunityContactRole> lstContRoles=[Select
+                                                   ContactId,
+                                                   IsPrimary,
+                                                   OpportunityId,
+                                                   Role
+                                                   from
+                                                   OpportunityContactRole
+                                                   where OpportunityId=:mapIdsofParentOptyandOpty.keyset()
+                                                   and 
+                                                   IsPrimary=true];
+        if(!lstContRoles.isEmpty())
+        {
+            
+            for(OpportunityContactRole oppConRole: lstContRoles)
+            { 
+                
+                
+                OpportunityContactRole  OppContactRole= new OpportunityContactRole();
+                OppContactRole.ContactId= oppConRole.ContactId;
+                OppContactRole.IsPrimary=oppConRole.IsPrimary;
+                OppContactRole.OpportunityId=mapIdsofParentOptyandOpty.get(oppConRole.OpportunityId);
+                OppContactRole.Role=oppConRole.Role;
+                lstOptyContRoles.add(OppContactRole);
+            }
+        }       
+        
+        
+        if(!lstOptyContRoles.isEmpty() && lstOptyContRoles.size()>0)
+        {  
+            insert lstOptyContRoles;
+        }           
+        
+    }
+    // end    
+    public static map<id, string> CSMRoleMandatory(List<Opportunity> NewOppItems, Map<id,Opportunity> mapOldOppValue, String strOperation){ //GTT-3088 changes
+        decimal monthlyrevenue = 0;
+        decimal onetimerevenue = 0;
+        Integer CountOptyTeamCSM = 0;
+        List<Opportunity_Validations__mdt> Opportunityvalidatnmdt=OpportunityTriggerUtility.opportunityvalidationmtd();
+        String csmvalue=System.Label.CSMTeamRole;        
+        String searchString = '%' + csmvalue + '%';
+        MAP<String, currencyType> currencytypemap = new MAP<String, currencyType>();
+        Map<String,Opportunity_Validations__mdt> mandateTeamMemberMap=new  Map<String,Opportunity_Validations__mdt>();
+        Set<Id> UserId=new Set<Id>();
+        String strCampaignInfluenceErr;
+        Map<id, String> mapOppError = new Map<id, String>();
+   if(GenesisTrialConvertController.isconverted==false){
+        string currentUserProfileId = userinfo.getProfileId();
+        String currentuserProfileName = TriggerUtility.getUserRecord().Profile.Name; //Added to GTT-3530
+        
+       System.debug('L3 Testing 2700360 CSMRoleMandatory Inside');
+        
+        for(Opportunity o1:NewOppItems){
+            UserId.add(o1.createdbyId);
+        }
+        
+        Map<Id,User> userdetails=new Map<Id,User>([Select id, profile.name from user where id in :UserId]);//Query created by user profile
+        CountOptyTeamCSM = OpportunityTriggerHandler.CSMteamrolecount(NewOppItems, searchString); // Query opp team
+        currencytypemap = GRCManageAssetsUtility.queryAllcurrencyType();//To get all the currency types        
+       
+        
+        
+        for(Opportunity_Validations__mdt Opptyvalidationdata:Opportunityvalidatnmdt){
+            mandateTeamMemberMap.put(Opptyvalidationdata.DeveloperName,Opptyvalidationdata);
+        }       
+        
+        for(Opportunity opp : NewOppItems){ 
+            if(currencytypemap.get(opp.Currency__c)!=null && opp.tocGSCSMonthlyRecurring__c != null &&  opp.tocGSCSMonthlyRecurring__c != 0)
+                monthlyrevenue = GRCManageAssetsUtility.convertToUSDCurrency(currencytypemap.get(opp.Currency__c),opp.tocGSCSMonthlyRecurring__c);//to convert monthly recurring revenue into USD
+                
+            if(currencytypemap.get(opp.Currency__c)!=null && opp.tocGSCSOneTimeRevenue__c != null && opp.tocGSCSOneTimeRevenue__c != 0)
+                onetimerevenue = GRCManageAssetsUtility.convertToUSDCurrency(currencytypemap.get(opp.Currency__c),opp.tocGSCSOneTimeRevenue__c);//to convert one time revenue into USD
+             
+            
+             
+            //Added for GTT-3530-START.
+           //GTT-5088 Start
+           if(strOperation <> 'CampaignInfluence'){             
+             if((userdetails.get(opp.createdbyid).profile.Name !='System Administrator' && userdetails.get(opp.createdbyid).profile.Name!='CDM User' && userdetails.get(opp.createdbyid).profile.Name!='Integration' && userdetails.get(opp.createdbyid).profile.Name!='API') && (currentuserProfileName != 'System Administrator' && currentuserProfileName != 'Integration' && currentuserProfileName != 'CDM User' && currentuserProfileName != 'API') && (opp.StageName == System.Label.Opportunity_Stage_4 || opp.StageName == System.Label.Opportunity_Stage_5 || opp.StageName == System.Label.Opportunity_Stage_6 || opp.StageName == System.Label.Opportunity_Stage_7) && mapOldOppValue.get(opp.id).SyncedQuoteId==opp.SyncedQuoteId  && (opp.Win_Loss_One_Time_Threshold__c == 'Yes' || opp.Win_Loss_Recurring_Threshold__c == 'Yes') && QuoteTriggerHandler.syncQuoteFlag == True && TriggerStopper.stopOpp == false && opp.CSM_Assigned__c == mapOldOppValue.get(opp.id).CSM_Assigned__c && (opp.Cancellation__c == null || opp.tfcrmWinLossReason__c == null || opp.tfcrmWinLossCommentary__c == null)){
+              if((opp.tfcrmWinLossReason__c == null || opp.tfcrmWinLossCommentary__c == null) && (opp.tocOpportunityProductCount__c == mapOldOppValue.get(opp.id).tocOpportunityProductCount__c) && (  Label.Opportunity_Type_Migration.containsIgnoreCase(opp.tfcrmType__c) && ((opp.tfcrmType__c != mapOldOppValue.get(opp.id).tfcrmType__c) || (opp.StageName != mapOldOppValue.get(opp.id).StageName) )) ){
+                  // IF((ISNEW() && isConverted__c), False, True), --> is this check needed for Require_WL_Reason_Commentary_Stage_4to7
+                Opp.adderror(System.Label.WinLossErrorMessage);
+                
+              }//GTT-5088 End
+               /*Moving the Win/loss check to Validation rules - GTT-3871
+             else if(Label.Opportunity_Type_Expected_Cancel.containsIgnoreCase(opp.tfcrmType__c) && (opp.Cancellation__c == null || opp.tfcrmWinLossReason__c == null || opp.tfcrmWinLossCommentary__c == null) && ( (opp.CloseDate != mapOldOppValue.get(opp.id).CloseDate) || (opp.Commit_to_Forecast__c != mapOldOppValue.get(opp.id).Commit_to_Forecast__c)) ) {
+                opp.adderror(System.Label.CancellationCheck+','+System.Label.CancelWinLossRequired);              
+              }
+              */
+            }               
+        }   
+                       
+            //Added for GTT-3530-END.
+            
+              
+             
+              
+          //Added for GTT-4426-START.  
+            if((mapOldOppValue.get(opp.id).CIPS_PSFlag__c!=null) && (opp.CIPS_PSFlag__c!=null) && (opp.CIPS_PSFlag__c == mapOldOppValue.get(opp.id).CIPS_PSFlag__c) && userProfileName!='System Administrator' && userProfileName!='CDM User' && userProfileName!='API' && userProfileName!='Integration' && mapOldOppValue.get(opp.id).SyncedQuoteId==opp.SyncedQuoteId
+                    && ( (opp.Account_Coverage_Model__c)!=null && (opp.Account_Coverage_Model__c)!='' && (opp.get(mandateTeamMemberMap.get('Mandate_Team_Role_Account_Coverage_Model').Field_API__c))!= mandateTeamMemberMap.get('Mandate_Team_Role_Account_Coverage_Model').Field_Value__c) &&
+                    ( (opp.recordtypeId == System.Label.OpportunityRecordId &&
+                    (mandateTeamMemberMap.get('Mandate_Team_Role_Opty_Type').Field_Value__c).contains(String.valueOf(opp.get(mandateTeamMemberMap.get('Mandate_Team_Role_Opty_Type').Field_API__c))) &&
+                    ((monthlyrevenue != 0 && monthlyrevenue > Integer.valueof(mandateTeamMemberMap.get('Mandate_Team_Role_GTM_Revenue').Field_Value__c)) || (onetimerevenue != 0 && onetimerevenue > Integer.valueof(mandateTeamMemberMap.get('Mandate_Team_Role_GTM_One_Time_Revenue').Field_Value__c)) ) ) 
+                    || (monthlyrevenue !=0 && monthlyrevenue < Integer.valueof(mandateTeamMemberMap.get('Mandate_Team_Role_Cancel_GTM_Revenue').Field_Value__c) 
+                    && ((opp.recordtypeId == System.Label.OpportunityRecordId && (mandateTeamMemberMap.get('Mandate_Team_Role_Sale_Opty_Type').Field_Value__c).contains(String.valueOf(opp.get(mandateTeamMemberMap.get('Mandate_Team_Role_Sale_Opty_Type').Field_API__c)))) 
+                    || (String.valueof(opp.recordtypeId).Contains(System.Label.CancelRecordtype) 
+                        && strOperation <> 'CampaignInfluence' /*Added for GTT-4836*/ && (mandateTeamMemberMap.get('Mandate_Team_Role_Cancel_Opty_Type').Field_Value__c).contains(String.valueOf(opp.get(mandateTeamMemberMap.get('Mandate_Team_Role_Cancel_Opty_Type').Field_API__c)))))) ) ){
+       //Added for GTT-4426-END.
+                
+                            if(CountOptyTeamCSM == 0 && (userdetails.get(opp.createdbyid).profile.Name !='System Administrator' && userdetails.get(opp.createdbyid).profile.Name!='CDM User' &&
+                            userdetails.get(opp.createdbyid).profile.Name!='Integration' && userdetails.get(opp.createdbyid).profile.Name!='API') && opp.StageName != System.Label.Opportunity_Stage_1 && opp.stageName != System.Label.Opportunity_Stage_2 && 
+                            opp.StageName != System.Label.Opportunity_Stage_3 && opp.StageName != System.Label.Opportunity_Stage_8){ 
+                                if(strOperation <> 'CampaignInfluence'){                   
+                                    Opp.StageName.adderror(System.Label.CSMMandatoryerrormessage); // GTT-5301
+                                    strCampaignInfluenceErr = 'csmTeamMemberCheck';
+                                }
+                                else{
+                                    mapOppError.put(opp.id , System.Label.CSMMandatoryerrormessage);
+                                    strCampaignInfluenceErr = 'csmTeamMemberCheckFromCI';
+                                    
+                                }
+                            } //end extra csm team role check
+                            if(strOperation == 'CampaignInfluence' && (opp.StageName == System.Label.Opportunity_Stage_5 || opp.stageName == System.Label.Opportunity_Stage_6 || opp.StageName == System.Label.Opportunity_Stage_7) && 
+                            (string.ISBLANK(opp.CSM_hand_off_notes__c) || (opp.CSM_hand_off_notes__c == System.Label.CSM_hand_off_notes)) && 
+                            (userProfileName != 'CDM User' && userProfileName != 'API' && userProfileName != 'Integration' && userProfileName != 'System Administrator')){
+                                mapOppError.put(opp.id , System.Label.CSM_Handoff_Error) ;
+                                strCampaignInfluenceErr = 'CSMHandoffNotesFromCI';
+                                
+                            }//end csm handoff notes check
+                      //end extra csm team role check
+                    if(strOperation == 'CampaignInfluence' && (opp.StageName == System.Label.Opportunity_Stage_5 || opp.stageName == System.Label.Opportunity_Stage_6 || opp.StageName == System.Label.Opportunity_Stage_7) && (string.ISBLANK(opp.CSM_hand_off_notes__c) || (opp.CSM_hand_off_notes__c == System.Label.CSM_hand_off_notes)) && (userProfileName != 'CDM User' && userProfileName != 'API' && userProfileName != 'Integration' && userProfileName != 'System Administrator')){
+                        mapOppError.put(opp.id , System.Label.CSM_Handoff_Error) ;
+                        strCampaignInfluenceErr = 'CSMHandoffNotesFromCI';
+                        
+                    }//end csm handoff notes check
+             }//end of outer if
+            
+            //QCCF-169 code Starts
+            if((opp.recordtypeId == System.Label.CommercialRecordId) || (opp.recordtypeId == System.Label.EarlyStageRecordId) || (String.valueof(opp.recordtypeId).Contains(System.Label.CancelRecordtype)) || Test.isRunningTest())
+			{
+                if(CPQQuoteTriggerGenericHelper.csmMandate==true && (mapOldOppValue.get(opp.id).CIPS_PSFlag__c!=null) &&   (opp.CIPS_PSFlag__c!=null) && (opp.CIPS_PSFlag__c == mapOldOppValue.get(opp.id).CIPS_PSFlag__c) &&  (userProfileName == 'RFT Sales with LinkedIn' || userProfileName == 'RFT Sales' || userProfileName == 'TF Commissions Analyst + IC' || userProfileName == 'Global Business Ops + Edit' || userProfileName ==  'Global Business Opps' || userProfileName == 'Refinitiv Sales and Service' || userProfileName == 'TR Transaction Sales with LinkedIn' || userProfileName == 'Genesis Internal Account User' || userProfileName == 'GBC' || userProfileName == 'CDM User' || userProfileName == 'Global TRUST Reporting' ||  userProfileName == 'TF ASR with CM' || userProfileName == 'CA Super User') && mapOldOppValue.get(opp.id).SyncedQuoteId==opp.SyncedQuoteId)
+					{
+                     if( (opp.Account_Coverage_Model__c)!=null && (opp.Account_Coverage_Model__c)!='' &&  (opp.get(mandateTeamMemberMap.get('Mandate_Team_Role_Account_Coverage_Model').Field_API__c))!= mandateTeamMemberMap.get('Mandate_Team_Role_Account_Coverage_Model').Field_Value__c ){
+                        
+                              if((  ( opp.tfcrmType__c!=null && (mandateTeamMemberMap.get('Mandate_Team_Role_CPQ_Opty_Type').Field_Value__c).contains(String.valueOf(opp.get(mandateTeamMemberMap.get('Mandate_Team_Role_CPQ_Opty_Type').Field_API__c)))  ) &&  ((monthlyrevenue != 0 && monthlyrevenue > Integer.valueof(mandateTeamMemberMap.get('Mandate_Team_Role_GTM_Revenue').Field_Value__c)) || (onetimerevenue != 0 && onetimerevenue > Integer.valueof(mandateTeamMemberMap.get('Mandate_Team_Role_GTM_One_Time_Revenue').Field_Value__c)) ) ) )
+							 {
+                             if((opp.recordtypeId == System.Label.EarlyStageRecordId) && opp.isConverted__c == false && CountOptyTeamCSM == 0   && opp.StageName != System.Label.Opportunity_Stage_1 && opp.stageName != System.Label.Opportunity_Stage_2 &&  opp.StageName != System.Label.Opportunity_Stage_3 && opp.StageName != System.Label.Opportunity_Stage_8)
+							 {
+                                 Opp.adderror(System.Label.CSMMandatoryerrormessage);
+							  mapOppError.put(opp.id , System.Label.CSMMandatoryerrormessage);
+                             }if( opp.recordtypeId == System.Label.CommercialRecordId && mapOldOppValue.get(opp.id).StageName== System.Label.Opportunity_Stage_4 && opp.StageName == System.Label.Opportunity_Stage_4 && CountOptyTeamCSM == 0  ) {
+                                 
+                                 Opp.adderror(System.Label.CSMMandatoryerrormessage);
+                             }                                 
+                                 if( (opp.recordtypeId == System.Label.CommercialRecordId) && opp.isConverted__c == false && CountOptyTeamCSM == 0 &&   opp.StageName != System.Label.Opportunity_Stage_1 && opp.stageName != System.Label.Opportunity_Stage_2 &&  opp.StageName != System.Label.Opportunity_Stage_3 && opp.StageName != System.Label.Opportunity_Stage_8)
+							 {
+                                 Opp.adderror(System.Label.CSMMandatoryerrormessage);
+							  mapOppError.put(opp.id , System.Label.CSMMandatoryerrormessage);
+						     } if((opp.StageName == System.Label.Opportunity_Stage_5 || opp.stageName == System.Label.Opportunity_Stage_6 || opp.StageName == System.Label.Opportunity_Stage_7 )&& (string.ISBLANK(opp.CSM_hand_off_notes__c) || (opp.CSM_hand_off_notes__c == System.Label.CSM_hand_off_notes)) )
+							 {  
+                                 Opp.adderror(System.Label.CSM_Handoff_Error);
+                                mapOppError.put(opp.id , System.Label.CSM_Handoff_Error) ; 
+                              }} 
+                     if ((opp.recordtypeId == System.Label.CommercialRecordId || opp.recordtypeId == System.Label.EarlyStageRecordId) && monthlyrevenue !=0 && monthlyrevenue < Integer.valueof(mandateTeamMemberMap.get('Mandate_Team_Role_Cancel_GTM_Revenue').Field_Value__c) && (mandateTeamMemberMap.get('Mandate_Team_Role_CPQ_Cancel_Opty_Type').Field_Value__c).contains(String.valueOf(opp.get(mandateTeamMemberMap.get('Mandate_Team_Role_CPQ_Cancel_Opty_Type').Field_API__c))) && CountOptyTeamCSM == 0  ){
+                                 
+                                 Opp.adderror(System.Label.CSMMandatoryerrormessage);
+                             }
+                       if((string.ISBLANK(opp.CSM_hand_off_notes__c) || opp.CSM_hand_off_notes__c == System.Label.CSM_hand_off_notes) && ((opp.recordtypeId == System.Label.CommercialRecordId || opp.recordtypeId == System.Label.EarlyStageRecordId) && monthlyrevenue !=0 && monthlyrevenue < Integer.valueof(mandateTeamMemberMap.get('Mandate_Team_Role_Cancel_GTM_Revenue').Field_Value__c) && (mandateTeamMemberMap.get('Mandate_Team_Role_CPQ_Cancel_Opty_Type').Field_Value__c).contains(String.valueOf(opp.get(mandateTeamMemberMap.get('Mandate_Team_Role_CPQ_Cancel_Opty_Type').Field_API__c)))  && ((opp.StageName == System.Label.Opportunity_Stage_5 || opp.stageName == System.Label.Opportunity_Stage_6 || opp.StageName == System.Label.Opportunity_Stage_7) && (string.ISBLANK(opp.CSM_hand_off_notes__c) || (opp.CSM_hand_off_notes__c == System.Label.CSM_hand_off_notes)) )  ))  
+							 {  
+                                 Opp.adderror(System.Label.CSM_Handoff_Error);
+                                mapOppError.put(opp.id , System.Label.CSM_Handoff_Error) ; 
+                              }
+                     }}  }
+            //QCCF-169 code End
+        }//end of FOR loop
+   }//end of IF
+        
+        return mapOppError;
+        
+    }//end CSMRoleMandatory
+//Added as part of GTT-3676 changes starts by deepu
+//commented as part of sept release
+    public static void UpdateCQSToNurtureSS8(Set<Id> OpptylstId){
+        System.debug('L3 Testing 2700360 UpdateCQSToNurtureSS8 Inside');
+        set <Id> UpdatedIds= new Set<Id>();
+        Set<Id> currentOpplstId = (Set<Id>)OpptylstId;
+        set<id> cpidCheck=new set<id>();
+        List<Contact_Proposition__c>CQSupdatelst= new List<Contact_Proposition__c>();
+        Map<Id,Contact_Proposition_Influence__c> Cpilst=new Map<Id,Contact_Proposition_Influence__c>([select id,Contact_Proposition__c ,Contact_Proposition__r.All_Opportunities__c,Contact_Proposition__r.Contact_Qualification_Status__c,ttr_Opp__c,ttr_Opp__r.stagename,Opportunity_Sales_Stage__c  from Contact_Proposition_Influence__c where ttr_Opp__c IN:currentOpplstId and Contact_Proposition__c IN (select id from Contact_Proposition__c)]); // OPP'S PROP
+        Set<string> cpids= new set<string>();
+        if(Cpilst.size()>0){
+        for(Id cpi2:Cpilst.keyset()){
+            if(Cpilst.get(cpi2).Opportunity_Sales_Stage__c != '8. Closed / No Order') {
+                cpids.add( Cpilst.get(cpi2).Contact_Proposition__c+'Open');
+            }
+            else { 
+                // cpids.add(Cpilst.get(cpi2).Contact_Proposition__c+'Closed');
+                cpidCheck.add(Cpilst.get(cpi2).Contact_Proposition__c);
+            }
+        }
+        If(cpidCheck.size()>0){
+            Map<Id,Contact_Proposition_Influence__c> Cpilst2=new Map<Id,Contact_Proposition_Influence__c>([select id,Contact_Proposition__c ,Contact_Proposition__r.All_Opportunities__c,Contact_Proposition__r.Contact_Qualification_Status__c,ttr_Opp__c,ttr_Opp__r.stagename,Opportunity_Sales_Stage__c  from Contact_Proposition_Influence__c where Contact_Proposition__c IN:cpidCheck]); 
+            
+            for(Id cpi2:Cpilst2.keyset()){
+                if(Cpilst2.get(cpi2).Opportunity_Sales_Stage__c != '8. Closed / No Order') {
+                    cpids.add( Cpilst2.get(cpi2).Contact_Proposition__c+'Open');
+                }
+                else
+                    cpids.add( Cpilst2.get(cpi2).Contact_Proposition__c+'Closed');
+            }
+           
+            for(Id cpi2:Cpilst2.keyset()){
+                
+                if(!cpids.contains(Cpilst2.get(cpi2).Contact_Proposition__c+'Open') && !UpdatedIds.contains(Cpilst2.get(cpi2).Contact_Proposition__c)){
+                    Contact_Proposition__c cp= new Contact_Proposition__c(id=Cpilst2.get(cpi2).Contact_Proposition__c, Open_Opportunities__c=0, Contact_Qualification_Status__c='Nurture', Contact_Nurture_Reason__c='No Opportunity'); 	//Statement consolidated to 1 line for code coverage.
+                     CQSupdatelst.add(cp);
+                    UpdatedIds.add(cp.id);
+                }
+            }
+           
+            update CQSupdatelst;
+        }
+        }
+    }
+    //Added as part of GTT-3676 changes ends by deepu
+/*********************************************************************************************************************
+* Call From    : before insert
+* Parameters   : list of opportunities
+* return       : Void
+* Action       : throws the validation error on lead conversion
+*********************************************************************************************************************/
+    //added validation rule on opportunity LeadCategoryofInterest as part of story CRMU-174
+    
+   @TestVisible
+   private static void LeadCategoryofInterestValidation(List<opportunity> OppList){
+       System.debug('L3 Testing 2700360 LeadCategoryofInterestValidation Inside');
+        for(Opportunity opp : OppList){
+            if(opp.isFromLead__c){
+                String RecTypeName = Schema.getGlobalDescribe().get('Opportunity').getDescribe().getRecordTypeInfosById().get(opp.RecordTypeId).getName();
+                List<string> hisdOppRecType = new List<string>{'FTSE Russell B&I','Yield Book','Mergent','SEDOL'};
+                if(hisdOppRecType.contains(RecTypeName)){
+                    if(opp.Lead_Category_of_Interest__c == null){
+                        opp.addError('Please provide the correct Category of Interest/Business Units for the selected record type');
+                    }else if((hisdOppRecType[0]==RecTypeName && opp.Lead_Category_of_Interest__c !='FTSE Russell Benchmarks & Indices') ||
+                            (hisdOppRecType[2]==RecTypeName && (opp.Lead_Category_of_Interest__c !='Mergent Academic'&& opp.Lead_Category_of_Interest__c !='Mergent Digital'))
+                            || (hisdOppRecType[3]==RecTypeName && opp.Lead_Category_of_Interest__c !='SEDOL Licensing' ) ||
+                            (hisdOppRecType[1]==RecTypeName && opp.Lead_Category_of_Interest__c !='Yield Book Analytics')){
+                            opp.addError('Please provide the correct Category of Interest/Business Units for the selected record type');  
+                    }
+                }
+            }
+        }
+    }
+
+
+/*********************************************************************************************************************
+* Call From    : before insert and before  update
+* Parameters   : list of opportunities
+* return       : Void
+* Action       : throws the validation error on lead conversion
+*********************************************************************************************************************/
+    //added validation rule on opportunity tocPreventMarketChange as part of story CRMU-174
+    @TestVisible
+    private static void tocPreventMarketChange(List<opportunity> OppList, Boolean isInsert){
+        System.debug('L3 Testing 2700360 tocPreventMarketChange Inside');
+        TRUST_Constants__c trustConst = TRUST_Constants__c.getInstance();
+        String validationExc = trustConst.Validation_Exclusion__c;
+        for(Opportunity opp : OppList){
+            String RecTypeName = Schema.getGlobalDescribe().get('Opportunity').getDescribe().getRecordTypeInfosById().get(opp.RecordTypeId).getName();
+            /*instead of checking Account.tocMigratedCountry__c we are checking opportunity.AccountId because 
+              Account.tocMigratedCountry__c is true if account record is present */
+            if(userProfileName != NULL){
+                if((userProfileName != 'System Administrator' && userProfileName != 'Integration' && userProfileName != 'API' && userProfileName != 'TF Help Desk'
+                    && opp.tfcrmMkt__c != 'Reuters') && opp.AccountId != NULL && (!(validationExc.contains(userProfileName))) && RecTypeName != 'Commercial' && RecTypeName != 'FTSE Russell B&I'
+                    && RecTypeName != 'Mergent' && RecTypeName != 'Yield Book'  && RecTypeName != 'SEDOL'){
+                       	opp.addError('Market has to be "Reuters" for migrated countries');
+                }  
+           	}           
+        }
+    }
+}
