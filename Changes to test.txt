@@ -1,0 +1,184 @@
+public static set<string> TriggerDisabledObjects() {
+        if(objectNames.size()==0){
+            user u = getUserRecord();
+            list<string> localObjectNames = new list<string>();
+            Disable_Trigger__c userLevelSetting = u.id != null && userinfo.getUserId() != Label.Automated_User_Id  ? Disable_Trigger__c.getValues(u.id) : null;
+            Disable_Trigger__c profileLevelSetting = u.profileId != null ? Disable_Trigger__c.getValues(u.profileId) : null;
+            
+            if(userLevelSetting!=null && userLevelSetting.Objects__c!=null){
+                
+                localObjectNames = userLevelSetting.Objects__c.split(',');
+                objectNames.addall(localObjectNames);
+                System.debug('Value objectNames in Utility userLevelSetting Start' + objectNames);
+            }
+            else if(profileLevelSetting!=null && profileLevelSetting.Objects__c!=null){
+                
+                localObjectNames = profileLevelSetting.Objects__c.split(',');
+                objectNames.addall(localObjectNames);
+                System.debug('Value objectNames in Utility profileLevelSetting' + objectNames);
+            }
+            
+            if(userLevelSetting==null && profileLevelSetting==null){
+                objectNames.add('NONE');
+                System.debug('Value objectNames in Utility userLevelSetting' + objectNames);
+            }
+            
+            else if (objectNames.isEmpty()){
+                objectNames.add('ALL');
+                System.debug('Value objectNames in Utility isEmpty' + objectNames);
+            }
+            
+        }
+        System.debug('Value objectNames in Utility' + objectNames);
+        return objectNames;
+        
+    }
+
+/***************************************************************************************************
+Project: Code Optimisation
+Class Name : MasterOpportunityTriggerHandler
+Description : This class will handle the different events for the account trigger
+-----------------------------------------------------------------------------------------------------
+Date             Author            Version            Comments
+2/12/2016        Deepika M         1.0                Initial Development
+*****************************************************************************************************/
+
+public class MasterOpportunityTriggerHandler implements ITriggerHandler{
+    
+    // Allows unit tests (or other code) to disable this trigger for the transaction
+    public static Boolean TriggerDisabled = FALSE;
+    
+    //Checks to see if the trigger has been disabled either by custom setting or by running code
+    public Boolean IsDisabled()
+    {
+       System.debug('L3 Testing 2700360 MasterOpportunityTriggerHandler Check Trigger');
+       set<string> objectNames = TriggerUtility.TriggerDisabledObjects();
+        System.debug('Value objectNames' + objectNames);
+        //if(objectNames.contains('ALL') || objectNames.contains('Account'))
+       if(objectNames.contains('ALL') || objectNames.contains('Opportunity'))
+       {
+           TriggerDisabled = TRUE;
+           System.debug('L3 Testing 2700360 TriggerDisabled to True');
+       }
+       else
+       {
+           if(trigger.isUpdate)
+           {   System.debug('L3 Testing 2700360 TriggerDisabled isUpdate');
+               if(trigger.isAfter)
+               {
+                   System.debug('L3 Testing 2700360 TriggerDisabled isAfter ExecuteTriggerEvent');
+                   TriggerDisabled = !TriggerUtility.ExecuteTriggerEvent('OpportunityAfterUpdate');
+                   System.debug('Value isAfter ExecuteTriggerEvent TriggerDisabled' + TriggerDisabled);
+               }
+               else
+               {
+                   System.debug('L3 Testing 2700360 TriggerDisabled isBefore Else OpportunityBeforeUpdate');
+                   TriggerDisabled = !TriggerUtility.ExecuteTriggerEvent('OpportunityBeforeUpdate');
+                   System.debug('Value isBefore ExecuteTriggerEvent TriggerDisabled' + TriggerDisabled);
+                   
+               }
+           }
+           else
+           {
+           TriggerDisabled = FALSE;
+               System.debug('L3 Testing 2700360 TriggerDisabled ELSE Call');
+           }
+       }
+        System.debug('Final Return Call this');
+       RETURN TriggerDisabled;
+    }
+    
+    //This method will handle the before insert event for the opportunity trigger
+    public void BeforeInsert(List<SObject> newItems){
+        System.debug('L3 Testing 2700360 MasterOpportunityTriggerHandler BeforeInsert Start');
+        OpportunityTriggerGenericHelper.genericBeforeInsert(newItems);
+        System.debug('L3 Testing 2700360 MasterOpportunityTriggerHandler GRCBeforeInsert Start');
+        OpportunityTriggerGRCHelper.GRCBeforeInsert(newItems);
+        System.debug('L3 Testing 2700360 MasterOpportunityTriggerHandler FXALLBeforeInsert Start');
+        OpportunityTriggerFXALLHelper.FXALLBeforeInsert(newItems); 
+        System.debug('L3 Testing 2700360 MasterOpportunityTriggerHandler OpportunityTriggerGenesisHelper Start');
+        OpportunityTriggerGenesisHelper.genesisBeforeInsert(newItems);
+        System.debug('L3 Testing 2700360 MasterOpportunityTriggerHandler OpportunityTriggerCPQHelper Start');
+        OpportunityTriggerCPQHelper.beforeInsert(newItems);
+        System.debug('L3 Testing 2700360 MasterOpportunityTriggerHandlerEnd');
+        
+
+    }
+    
+    //This method will handle the before update event for the opportunity trigger
+    public void BeforeUpdate(Map<Id, SObject> newItems, Map<Id, SObject> oldItems){
+        
+        System.debug('148778' + OpportunityTriggerGenericHelper.isExecutingOpptyUltimateParent());
+        //OpportunityTriggerGenericHelper.isExecutingOpptyUltimateParent();
+        if(OpportunityTriggerGenericHelper.isExecutingOpptyUltimateParent()) {
+            System.debug('L3 Testing 2700360 MasterOpportunityTriggerHandler genericBeforeupdate Start');
+            System.debug('L3 Testing 2700360 genericBeforeUpdate isOpptyUltimateParentRunning Not RUN');
+        OpportunityTriggerGenericHelper.genericBeforeupdate(newItems,OldItems);
+        System.debug('L3 Testing 2700360 MasterOpportunityTriggerHandler OpportunityTriggerGRCHelper Start');
+        OpportunityTriggerGRCHelper.GRCBeforeUpdate(newItems,OldItems);
+        System.debug('L3 Testing 2700360 MasterOpportunityTriggerHandler OpportunityTriggerFXALLHelper Start');
+        OpportunityTriggerFXALLHelper.FXALLBeforeUpdate(newItems,OldItems);
+        System.debug('L3 Testing 2700360 MasterOpportunityTriggerHandler OpportunityTriggerGenesisHelper Start');
+        OpportunityTriggerGenesisHelper.genesisBeforeUpdate(newItems,OldItems);
+        System.debug('L3 Testing 2700360 MasterOpportunityTriggerHandler TriggerUtility.triggerRecursiveCheck Start');
+        TriggerUtility.triggerRecursiveCheck.put('OpportunityBeforeUpdate',false);
+        System.debug('L3 Testing 2700360 MasterOpportunityTriggerHandler OpportunityTriggerGenesisHelper Start');
+        OpportunityTriggerGenesisHelper.genesisBulkRecursiveStop(newItems,OldItems);
+        System.debug('L3 Testing 2700360 MasterOpportunityTriggerHandler OpportunityTriggerCPQHelper Start');
+        OpportunityTriggerCPQHelper.beforeUpdate(newItems,OldItems);//For CRMU-830
+        System.debug('L3 Testing 2700360 MasterOpportunityTriggerHandler genericBeforeupdate End');
+        OpportunityTriggerGenericHelper.setOpptyUltimateParentRunning(false);
+    }
+    }
+    
+    //This method will handle the before delete event for the opportunity trigger
+    public void BeforeDelete(Map<Id, SObject> oldItems){
+        OpportunityTriggerGenericHelper.genericBeforeDelete(oldItems);
+        
+    }
+        
+    //This method will handle the after insert event for the opportunity trigger
+    public void AfterInsert(Map<Id, SObject> newItems){
+        System.debug('L3 Testing 2700360 MasterOpportunityTriggerHandler AfterInsert OpportunityTriggerGenericHelper Start');
+        OpportunityTriggerGenericHelper.genericAfterInsert(newItems);
+        System.debug('L3 Testing 2700360 MasterOpportunityTriggerHandler AfterInsert OpportunityTriggerGenericHelper END*');
+        System.debug('L3 Testing 2700360 MasterOpportunityTriggerHandler AfterInsert GRCAfterInsert Start');
+        OpportunityTriggerGRCHelper.GRCAfterInsert(newItems);
+        System.debug('L3 Testing 2700360 MasterOpportunityTriggerHandler AfterInsert OpportunityTriggerFXALLHelper Start');
+        OpportunityTriggerFXALLHelper.FXALLAfterInsert(newItems);
+        System.debug('L3 Testing 2700360 MasterOpportunityTriggerHandler AfterInsert OpportunityTriggerCPQHelper Start');
+        OpportunityTriggerCPQHelper.afterInsert(newItems);
+        System.debug('L3 Testing 2700360 MasterOpportunityTriggerHandler AfterInsert GRCAfterInsert End');
+    }      
+    
+    //This method will handle the after update event for the opportunity trigger
+    public void AfterUpdate(Map<Id, SObject> newItems, Map<Id, SObject> oldItems){
+        System.debug('L3 Testing 2700360 MasterOpportunityTriggerHandler AfterUpdate OpportunityTriggerGRCHelper Start');
+        OpportunityTriggerGRCHelper.GRCAfterUpdate(newItems,oldItems);
+        System.debug('L3 Testing 2700360 MasterOpportunityTriggerHandler AfterUpdate FXALLAfterUpdate Start');
+        //system.debug('FXALLAfterUpdate called');
+        OpportunityTriggerFXALLHelper.FXALLAfterUpdate(newItems,oldItems);
+        System.debug('L3 Testing 2700360 MasterOpportunityTriggerHandler AfterUpdate OpportunityTriggerGenericHelper Start');
+       // OpportunityTriggerPACHelper.AfterUpdate(newItems);
+        OpportunityTriggerGenericHelper.genericAfterUpdate(newItems,oldItems);
+        System.debug('L3 Testing 2700360 MasterOpportunityTriggerHandler AfterUpdate OppQuoteAndOppQuoteLineItemSync Start');
+        //system.debug('debugger1-->'+newItems+oldItems);
+        System.debug('L3 Testing 2700360 MasterOpportunityTriggerHandler AfterUpdate OpportunityTriggerCPQHelper Start');
+        OpportunityTriggerGenericHelper.OppQuoteAndOppQuoteLineItemSync(newItems,oldItems);
+        TriggerUtility.triggerRecursiveCheck.put('OpportunityAfterUpdate',false); 
+        OpportunityTriggerCPQHelper.afterUpdate(newItems,OldItems);
+        System.debug('L3 Testing 2700360 MasterOpportunityTriggerHandler AfterUpdate OpportunityTriggerCPQHelper End');
+    }
+                                    
+    
+    //This method will handle the after delete event for the opportunity trigger
+    public void AfterDelete(Map<Id,SObject> oldItems){
+    
+    }
+    
+    //This method will handle the after undelete event for the opportunity trigger
+    public void AfterUndelete(Map<Id, SObject> oldItems){
+    
+    }
+
+}
