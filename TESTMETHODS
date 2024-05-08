@@ -49,3 +49,25 @@ public static List<CampaignInfluence> getCampInfluenceList(List<string> opprtuni
                            WHERE id=:clonedOppMap.keyset() AND Unica_ID__c!='']; 
         return parentOpptyList;
     }
+
+
+
+
+    public static List<CampaignInfluence> getCampInfluenceList(List<String> oppIdList) {
+        List<CampaignInfluence> campInfluList = new List<CampaignInfluence>();
+        
+        // Mock data for CampaignInfluence records
+        for(Integer i = 0; i < 7; i++) { // Set 7 records
+            String oppId = 'OpportunityId' + i; // Sample Opportunity Id
+            CampaignInfluence campInfluence = new CampaignInfluence(
+                Id = Id.valueOf('001XXXXXXXXXXXXXX' + i), // Sample Id, replace with appropriate Id
+                CampaignId = 'CampaignId' + i, // Sample CampaignId
+                OpportunityId = oppId, // Opportunity Id from the list
+                ModelId = 'ModelId' + i, // Sample ModelId
+                Campaign = new Campaign(Unica_ID__c = 'UnicaId' + i) // Sample Campaign with Unica_ID__c field set
+            );
+            campInfluList.add(campInfluence);
+        }
+        
+        return campInfluList;
+    }
