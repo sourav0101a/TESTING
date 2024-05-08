@@ -58,3 +58,132 @@ private class CreateOppTeamMembersTest {
         System.assertEquals(0, [SELECT count() FROM OpportunityTeamMember WHERE OpportunityId = :opp.Id]);
     }
 }
+
+
+@isTest
+private class OpportunityTriggerGenericHelperTest {
+
+    static testMethod void testGenericBeforeInsert() {
+        // Test data creation
+        Account acc = new Account(Name = 'Test Account');
+        insert acc;
+
+        // Create test opportunity
+        Opportunity opp = new Opportunity(Name = 'Test Opportunity', StageName = 'Prospecting', CloseDate = Date.today(), AccountId = acc.Id);
+        insert opp;
+
+        Test.startTest();
+        // Call the method under test
+        OpportunityTriggerGenericHelper.genericBeforeInsert(new List<SObject>{ opp });
+        Test.stopTest();
+
+        // Assert the changes made in the method
+        System.assertEquals(UserInfo.getName(), opp.Stage_Last_Modified_By__c);
+        System.assertEquals(true, opp.Redistribution__c);
+        System.assertEquals('Redistribution', opp.Partner_Role__c);
+        System.assertEquals(true, opp.Access_Statement__c);
+        System.assertEquals(opp.OwnerId, opp.OldOwner__c);
+        System.assertEquals(opp.OwnerId, opp.CustOpptyOwner__c);
+        System.assertEquals(acc.ShippingCountry, opp.Account_Country__c);
+        // Add more assertions as needed
+    }
+
+    static testMethod void testGenericBeforeInsert_NoAssociatedId() {
+        // Test data creation without AssociatedId
+        Account acc = new Account(Name = 'Test Account');
+        insert acc;
+
+        // Create test opportunity
+        Opportunity opp = new Opportunity(Name = 'Test Opportunity', StageName = 'Prospecting', CloseDate = Date.today(), AccountId = acc.Id);
+        insert opp;
+
+        Test.startTest();
+        // Call the method under test
+        OpportunityTriggerGenericHelper.genericBeforeInsert(new List<SObject>{ opp });
+        Test.stopTest();
+
+        // Assert the changes made in the method
+        System.assertEquals(UserInfo.getName(), opp.Stage_Last_Modified_By__c);
+        System.assertEquals(true, opp.Redistribution__c);
+        System.assertEquals('Redistribution', opp.Partner_Role__c);
+        System.assertEquals(true, opp.Access_Statement__c);
+        System.assertEquals(opp.OwnerId, opp.OldOwner__c);
+        System.assertEquals(opp.OwnerId, opp.CustOpptyOwner__c);
+        System.assertEquals(acc.ShippingCountry, opp.Account_Country__c);
+        // Add more assertions as needed
+    }
+
+    static testMethod void testGenericBeforeInsert_TrialOpportunity() {
+        // Test data creation with Trial Opportunity
+        Account acc = new Account(Name = 'Test Account');
+        insert acc;
+
+        // Create test opportunity
+        Opportunity opp = new Opportunity(Name = 'Test Opportunity', StageName = 'Prospecting', CloseDate = Date.today(), AccountId = acc.Id, Trial_Opportunity__c = true);
+        insert opp;
+
+        Test.startTest();
+        // Call the method under test
+        OpportunityTriggerGenericHelper.genericBeforeInsert(new List<SObject>{ opp });
+        Test.stopTest();
+
+        // Assert the changes made in the method for Trial Opportunity
+        System.assertEquals(UserInfo.getName(), opp.Stage_Last_Modified_By__c);
+        System.assertEquals(true, opp.Redistribution__c);
+        System.assertEquals('Redistribution', opp.Partner_Role__c);
+        System.assertEquals(true, opp.Access_Statement__c);
+        System.assertEquals(opp.OwnerId, opp.OldOwner__c);
+        System.assertEquals(opp.OwnerId, opp.CustOpptyOwner__c);
+        System.assertEquals(acc.ShippingCountry, opp.Account_Country__c);
+        System.assertEquals('New Account', opp.tfcrmType__c);
+        // Add more assertions as needed
+    }
+
+    static testMethod void testGenericBeforeInsert_NoAccessStatement() {
+        // Test data creation without Access Statement
+        Account acc = new Account(Name = 'Test Account');
+        insert acc;
+
+        // Create test opportunity
+        Opportunity opp = new Opportunity(Name = 'Test Opportunity', StageName = 'Prospecting', CloseDate = Date.today(), AccountId = acc.Id, Access_Statement__c = false);
+        insert opp;
+
+        Test.startTest();
+        // Call the method under test
+        OpportunityTriggerGenericHelper.genericBeforeInsert(new List<SObject>{ opp });
+        Test.stopTest();
+
+        // Assert the changes made in the method
+        System.assertEquals(UserInfo.getName(), opp.Stage_Last_Modified_By__c);
+        System.assertEquals(true, opp.Redistribution__c);
+        System.assertEquals('Redistribution', opp.Partner_Role__c);
+        System.assertEquals(true, opp.Access_Statement__c);
+        System.assertEquals(opp.OwnerId, opp.OldOwner__c);
+        System.assertEquals(opp.OwnerId, opp.CustOpptyOwner__c);
+        System.assertEquals(acc.ShippingCountry, opp.Account_Country__c);
+        // Add more assertions as needed
+    }
+
+    static testMethod void testGenericBeforeInsert_UpdateOppFields() {
+        // Test data creation
+        Account acc = new Account(Name = 'Test Account', ShippingCountry = 'USA');
+        insert acc;
+
+        // Create test opportunity
+        Opportunity opp = new Opportunity(Name = 'Test Opportunity', StageName = 'Prospecting', CloseDate = Date.today(), AccountId = acc.Id);
+        insert opp;
+
+        Test.startTest();
+        // Call the method under test
+        OpportunityTriggerGenericHelper.genericBeforeInsert(new List<SObject>{ opp });
+        Test.stopTest();
+
+        // Assert the changes made in the method
+        // Example assertions
+        System.assertEquals('USA', opp.Account_Country__c);
+        // Add more assertions as needed
+    }
+
+    // Add more test methods to cover various scenarios and edge cases
+}
+
