@@ -1,1 +1,31 @@
+@isTest
+public class TestOpportunityTriggerGenericHelper {
+
+    @isTest
+    static void testGenericBeforeInsert() {
+        // Create test data
+        Account acc = new Account(Name = 'Test Account');
+        insert acc;
+        
+        Opportunity opp = new Opportunity(
+            Name = 'Test Opportunity',
+            StageName = 'Prospecting',
+            CloseDate = Date.today(),
+            AccountId = acc.Id
+        );
+        insert opp;
+
+        // Call the method to be tested
+        Test.startTest();
+        OpportunityTriggerGenericHelper.genericBeforeInsert(new List<SObject>{ opp });
+        Test.stopTest();
+
+        // Verify the results
+        // Example assertions
+        System.assertEquals('Test Opportunity', opp.Name);
+        System.assertEquals('Prospecting', opp.StageName);
+        System.assertEquals(acc.Id, opp.AccountId);
+        // Add more assertions as needed based on your specific requirements and the behavior of the method
+    }
+}
 
