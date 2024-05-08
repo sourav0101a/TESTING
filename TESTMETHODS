@@ -29,3 +29,11 @@ public class TestOpportunityTriggerGenericHelper {
     }
 }
 
+
+public static List<CampaignInfluence> getCampInfluenceList(List<string> opprtunityIdList){
+        List<CampaignInfluence> campInfluList= new List<CampaignInfluence>();
+        campInfluList= [SELECT id,CampaignId, OpportunityId, ModelId, Campaign.Unica_ID__c
+                                  FROM CampaignInfluence
+                                  WHERE OpportunityId IN :opprtunityIdList];  
+        return campInfluList;
+    }
