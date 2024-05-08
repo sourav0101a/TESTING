@@ -19,3 +19,13 @@
         
     }//End Of Generic Before delete
 
+        // For example, verify the inserted CampaignInfluence records
+        List<CampaignInfluence> insertedRecords = [SELECT Id, OpportunityId, CampaignId, ModelId FROM CampaignInfluence];
+        System.assertEquals(3, insertedRecords.size(), 'Incorrect number of CampaignInfluence records inserted');
+        // Add more assertions to validate the data as needed
+        
+        // Verify CampaignInfluence records associated with genesis opportunities
+        for (Id opptyId : genesisOppMap.keySet()) {
+            List<CampaignInfluence> associatedRecords = [SELECT Id FROM CampaignInfluence WHERE OpportunityId = :opptyId];
+            System.assertNotEquals(0, associatedRecords.size(), 'No CampaignInfluence records associated with Genesis Opportunity');
+        }
