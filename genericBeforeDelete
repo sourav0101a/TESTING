@@ -1,0 +1,21 @@
+ //Generic Before Delete Method
+    public static void genericBeforeDelete(Map<Id,SObject> oldItems){
+        
+        // Used to check if user is TFinegration and System Admin profile prevent them from deleting the opportunity
+        for(Opportunity oppDelete:(List<Opportunity>)oldItems.values()){
+
+            //Check if the Opportunity is created by TF Integration User(deleteOpp)
+            if(oppDelete.CreatedById ==Label.UnicaDeleteId && oppDelete.Unica_ID__c!= '' && oppDelete.Unica_ID__c!= null){
+                String UserNames = Label.Delete_Record_Restriction; // Tf Integration User
+                String ProfileIds = Label.Delete_Record_Restriction_Profile; //System Admin Profile
+
+                // Check if the user trying to delete opportunity is not TFintegration user or User with system Admin profile
+                if (!UserNames.contains(UserInfo.getName()+';') && !ProfileIds.contains(UserInfo.getProfileId()+';')){
+
+                    oppDelete.addError(Label.Opportunity_deelete_error_message);
+                }
+            }
+        }
+        
+    }//End Of Generic Before delete
+
