@@ -1,0 +1,43 @@
+@isTest
+private class OpportunityCampaignAssociationTest {
+    static testMethod void testOpptyCampaignAssociation() {
+        // Create test data for cloned opportunities
+        List<Opportunity> clonedOpps = new List<Opportunity>();
+        for(Integer i = 0; i < 5; i++) {
+            Opportunity opp = new Opportunity(Name = 'Cloned Opp ' + i, StageName = 'Prospecting', CloseDate = Date.today());
+            clonedOpps.add(opp);
+        }
+        insert clonedOpps;
+
+        // Create test data for genesis opportunities
+        List<Opportunity> genesisOpps = new List<Opportunity>();
+        for(Integer i = 0; i < 3; i++) {
+            Opportunity opp = new Opportunity(Name = 'Genesis Opp ' + i, StageName = 'Prospecting', CloseDate = Date.today());
+            genesisOpps.add(opp);
+        }
+        insert genesisOpps;
+
+        // Create test data for campaign influences
+        List<CampaignInfluence> campInfluences = new List<CampaignInfluence>();
+        for(Opportunity clonedOpp : clonedOpps) {
+            CampaignInfluence campInfluence = new CampaignInfluence(OpportunityId = clonedOpp.Id, CampaignId = 'CampaignId1', ModelId = 'ModelId1');
+            campInfluences.add(campInfluence);
+        }
+        for(Opportunity genesisOpp : genesisOpps) {
+            CampaignInfluence campInfluence = new CampaignInfluence(OpportunityId = genesisOpp.Id, CampaignId = 'CampaignId2', ModelId = 'ModelId2');
+            campInfluences.add(campInfluence);
+        }
+        insert campInfluences;
+
+        // Call the method to be tested
+        Test.startTest();
+        OpportunityTriggerUtility.opptyCampaignAssociation(
+            new Map<Id, Id>{},
+            new Map<Id, String>{}
+        );
+        Test.stopTest();
+
+        // Add assertions here if needed
+        // Example: System.assertEquals(expectedResult, actualResult);
+    }
+}
