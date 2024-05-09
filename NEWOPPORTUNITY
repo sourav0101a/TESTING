@@ -62,40 +62,58 @@ private class OpportunityTriggerUtilityTest {
 
 
 @isTest
-private class QuoteUtilityTest {
+private class OpportunityTriggerUtilityTest {
     
     @isTest
-    static void testResurrectExpiredQuotes() {
-        // Create test expired quotes
-        List<SBQQ__Quote__c> expiredQuoteList = new List<SBQQ__Quote__c>{
-            new SBQQ__Quote__c(SBQQ__Status__c = 'Expired', Quote_Valid_to__c = Date.today().addDays(-1)),
-            new SBQQ__Quote__c(SBQQ__Status__c = 'Expired', Quote_Valid_to__c = Date.today().addDays(-5)),
-            new SBQQ__Quote__c(SBQQ__Status__c = 'Expired', Quote_Valid_to__c = Date.today().addDays(5))
-        };
-        insert expiredQuoteList;
+    static void testPopulateAssociatedOppValuestoOpportunity() {
+        // Create test data
+        Date closeDate = Date.today().addDays(10); // Set a close date
         
-        // Create test list of expired quote IDs
-        List<String> expiredQuoteIds = new List<String>();
-        for(SBQQ__Quote__c quote : expiredQuoteList) {
-            expiredQuoteIds.add(quote.Id);
-        }
+        // Create parent opportunity with required fields
+        Opportunity parentOpp = new Opportunity(
+            Name = 'Parent Opportunity',
+            StageName = 'Closed Won',
+            CloseDate = closeDate,
+            Lead_Source_Most_Recent__c = 'Online',
+            Secondary_Lead_Source_Most_Recent__c = 'Referral'
+        );
+        insert parentOpp;
         
-        // Call the method to be tested
+        // Create associated opportunity with required fields
+        Opportunity associatedOpp = new Opportunity(
+            Name = 'Associated Opportunity',
+            StageName = 'Closed Won',
+            CloseDate = closeDate,
+            Probability = 100,
+            Multi_Campaigns__c = 'Campaign1;Campaign2',
+            Lead_Source_Most_Recent__c = 'Social Media',
+            Secondary_Lead_Source_Most_Recent__c = 'Advertisement'
+        );
+        insert associatedOpp;
+        
+        // Create an opportunity with associated opportunity ID
+        Opportunity oppWithForAssociatedOpps = new Opportunity(
+            Name = 'Opportunity with Associated Opportunity',
+            StageName = 'Prospecting',
+            Associated_Id__c = associatedOpp.Id
+        );
+        insert oppWithForAssociatedOpps;
+        
+        // Set up a set of parent opportunity IDs
+        Set<Id> setParentOpp = new Set<Id>{ parentOpp.Id };
+        
         Test.startTest();
-        QuoteUtility.resurrectExpiredQuotes(expiredQuoteIds);
+        // Call the method to be tested
+        OpportunityTriggerUtility.PopulateAssociatedOppValuestoOpportunity(new List<Opportunity>{ oppWithForAssociatedOpps }, setParentOpp);
         Test.stopTest();
         
-        // Verify the updated quotes
-        List<SBQQ__Quote__c> updatedQuotes = [SELECT Id, SBQQ__Status__c, Quote_Valid_to__c FROM SBQQ__Quote__c WHERE Id IN :expiredQuoteIds];
-        System.assertEquals(3, updatedQuotes.size(), 'Incorrect number of quotes updated');
-        for(SBQQ__Quote__c quote : updatedQuotes) {
-            if (quote.Quote_Valid_to__c != null && quote.Quote_Valid_to__c > Date.today()) {
-                // Verify the Quote_Valid_to__c date has been extended by 30 days for future dates
-                System.assertEquals(Date.today().addDays(30), quote.Quote_Valid_to__c, 'Quote Valid To date not updated correctly');
-            } else {
-                // Verify the SBQQ__Status__c has been updated to 'In Progress' for expired or null dates
-                System.assertEquals('In Progress', quote.SBQQ__Status__c, 'Quote status not updated correctly');
-            }
-        }
-    }
-}
+        // Verify the updated Opportunity fields
+        Opportunity updatedOpp = [SELECT Id, Multi_Campaigns__c, Lead_Source_Most_Recent__c, Secondary_Lead_Source_Most_Recent__c FROM Opportunity WHERE Id = :oppWithForAssociatedOpps.Id];
+        
+        // Assert that fields are populated correctly
+        System.assertEquals(associatedOpp.Multi_Campaigns__c, updatedOpp.Multi_Campaigns__c, 'Multi_Campaigns__c not populated correctly');
+        System.assertEquals(associatedOpp.Lead_Source_Most_Recent__c, updatedOpp.Lead_Source_Most_Recent__c, 'Lead_Source_Most_Recent__c not populated correctly');
+        System.assertEquals(associatedOpp.Secondary_Lead_Source_Most_Recent__c, updatedOpp.Secondary_Lead_Source_Most_Recent__c, 'Secondary_Lead_Source_Most_Recent__c not populated correctly');
+        
+        // Verify that no errors are added
+        System.assertEquals(0, updatedOpp
