@@ -41,3 +41,47 @@ private class OpportunityCampaignAssociationTest {
         // Example: System.assertEquals(expectedResult, actualResult);
     }
 }
+
+
+
+
+
+@isTest
+private class OpportunityTriggerUtilityTest {
+    
+    @isTest
+    static void testUpdateCQSToNurtureSS8() {
+        // Create test data
+        Contact_Proposition__c cp1 = new Contact_Proposition__c(
+            // Add required fields
+        );
+        insert cp1;
+        
+        // Create Contact_Proposition_Influence__c records
+        Contact_Proposition_Influence__c cpi1 = new Contact_Proposition_Influence__c(
+            Contact_Proposition__c = cp1.Id,
+            Opportunity_Sales_Stage__c = '7. Opportunity Acceptance'
+            // Add other required fields
+        );
+        insert cpi1;
+        
+        // Set up the test data for the method
+        Set<Id> opptyIds = new Set<Id>{ cpi1.ttr_Opp__c };
+        
+        // Start the test
+        Test.startTest();
+        OpportunityTriggerUtility.UpdateCQSToNurtureSS8(opptyIds);
+        Test.stopTest();
+        
+        // Query the Contact_Proposition__c records after the method execution
+        List<Contact_Proposition__c> updatedCpList = [SELECT Id, Open_Opportunities__c, Contact_Qualification_Status__c, Contact_Nurture_Reason__c FROM Contact_Proposition__c WHERE Id = :cp1.Id];
+        
+        // Verify the expected behavior
+        System.assertEquals(1, updatedCpList.size(), 'One Contact_Proposition__c record should have been updated');
+        Contact_Proposition__c updatedCp = updatedCpList[0];
+        System.assertEquals(0, updatedCp.Open_Opportunities__c, 'Open_Opportunities__c field should have been updated to 0');
+        System.assertEquals('Nurture', updatedCp.Contact_Qualification_Status__c, 'Contact_Qualification_Status__c should have been updated to "Nurture"');
+        System.assertEquals('No Opportunity', updatedCp.Contact_Nurture_Reason__c, 'Contact_Nurture_Reason__c should have been updated to "No Opportunity"');
+    }
+}
+
