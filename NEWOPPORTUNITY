@@ -61,11 +61,16 @@ private class OpportunityTriggerUtilityTest {
 
 
 
- static void testResurrectExpiredQuotes() {
+@isTest
+private class QuoteUtilityTest {
+    
+    @isTest
+    static void testResurrectExpiredQuotes() {
         // Create test expired quotes
         List<SBQQ__Quote__c> expiredQuoteList = new List<SBQQ__Quote__c>{
             new SBQQ__Quote__c(SBQQ__Status__c = 'Expired', Quote_Valid_to__c = Date.today().addDays(-1)),
-            new SBQQ__Quote__c(SBQQ__Status__c = 'Expired', Quote_Valid_to__c = Date.today().addDays(-5))
+            new SBQQ__Quote__c(SBQQ__Status__c = 'Expired', Quote_Valid_to__c = Date.today().addDays(-5)),
+            new SBQQ__Quote__c(SBQQ__Status__c = 'Expired', Quote_Valid_to__c = Date.today().addDays(5))
         };
         insert expiredQuoteList;
         
@@ -79,3 +84,18 @@ private class OpportunityTriggerUtilityTest {
         Test.startTest();
         QuoteUtility.resurrectExpiredQuotes(expiredQuoteIds);
         Test.stopTest();
+        
+        // Verify the updated quotes
+        List<SBQQ__Quote__c> updatedQuotes = [SELECT Id, SBQQ__Status__c, Quote_Valid_to__c FROM SBQQ__Quote__c WHERE Id IN :expiredQuoteIds];
+        System.assertEquals(3, updatedQuotes.size(), 'Incorrect number of quotes updated');
+        for(SBQQ__Quote__c quote : updatedQuotes) {
+            if (quote.Quote_Valid_to__c != null && quote.Quote_Valid_to__c > Date.today()) {
+                // Verify the Quote_Valid_to__c date has been extended by 30 days for future dates
+                System.assertEquals(Date.today().addDays(30), quote.Quote_Valid_to__c, 'Quote Valid To date not updated correctly');
+            } else {
+                // Verify the SBQQ__Status__c has been updated to 'In Progress' for expired or null dates
+                System.assertEquals('In Progress', quote.SBQQ__Status__c, 'Quote status not updated correctly');
+            }
+        }
+    }
+}
