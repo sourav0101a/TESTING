@@ -1,0 +1,49 @@
+@isTest
+private class OpportunityTriggerUtilityTest {
+    
+    @isTest
+    static void testPopulateAssociatedOppValuestoOpportunity() {
+        // Create test data
+        Opportunity parentOpp = new Opportunity(
+            Name = 'Parent Opportunity',
+            StageName = 'Closed Won',
+            Lead_Source_Most_Recent__c = 'Online',
+            Secondary_Lead_Source_Most_Recent__c = 'Referral'
+        );
+        insert parentOpp;
+        
+        Opportunity associatedOpp = new Opportunity(
+            Name = 'Associated Opportunity',
+            StageName = 'Closed Won',
+            Multi_Campaigns__c = 'Campaign1;Campaign2',
+            Lead_Source_Most_Recent__c = 'Social Media',
+            Secondary_Lead_Source_Most_Recent__c = 'Advertisement'
+        );
+        insert associatedOpp;
+        
+        Opportunity oppWithForAssociatedOpps = new Opportunity(
+            Name = 'Opportunity with Associated Opportunity',
+            StageName = 'Prospecting',
+            Associated_Id__c = associatedOpp.Id
+        );
+        insert oppWithForAssociatedOpps;
+        
+        Set<Id> setParentOpp = new Set<Id>{ parentOpp.Id };
+        
+        Test.startTest();
+        // Call the method to be tested
+        OpportunityTriggerUtility.PopulateAssociatedOppValuestoOpportunity(new List<Opportunity>{ oppWithForAssociatedOpps }, setParentOpp);
+        Test.stopTest();
+        
+        // Verify the updated Opportunity fields
+        Opportunity updatedOpp = [SELECT Id, Multi_Campaigns__c, Lead_Source_Most_Recent__c, Secondary_Lead_Source_Most_Recent__c FROM Opportunity WHERE Id = :oppWithForAssociatedOpps.Id];
+        
+        // Assert that fields are populated correctly
+        System.assertEquals(associatedOpp.Multi_Campaigns__c, updatedOpp.Multi_Campaigns__c, 'Multi_Campaigns__c not populated correctly');
+        System.assertEquals(associatedOpp.Lead_Source_Most_Recent__c, updatedOpp.Lead_Source_Most_Recent__c, 'Lead_Source_Most_Recent__c not populated correctly');
+        System.assertEquals(associatedOpp.Secondary_Lead_Source_Most_Recent__c, updatedOpp.Secondary_Lead_Source_Most_Recent__c, 'Secondary_Lead_Source_Most_Recent__c not populated correctly');
+        
+        // Verify that no errors are added
+        System.assertEquals(0, updatedOpp.Trigger_Errors__c, 'Trigger_Errors__c should be 0');
+    }
+}
