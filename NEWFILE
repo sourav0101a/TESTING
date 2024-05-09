@@ -82,3 +82,9 @@ private class OpportunityTriggerUtilityTest {
         Contact_Proposition__c updatedCp = updatedCpList[0];
         System.assertEquals(0, updatedCp.Open_Opportunities__c, 'Open_Opportunities__c field should have been updated to 0');
         System.assertEquals('Nurture', updatedCp
+
+
+
+
+
+OpportunityTriggerUtility.setQuotestoExpired(new Set<Id>{testOpportunity1.Id, testOpportunity2.Id}, new Set<Id>{testQuote1.Id}, new Set<Id>{testQuote2.Id});
