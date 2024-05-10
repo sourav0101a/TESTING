@@ -1,0 +1,399 @@
+/***************************************************************************************************
+Class Name : OpportunityTriggerUtility
+Description : This is a utility class to hold methods common for opportunity triggers
+-----------------------------------------------------------------------------------------------------
+Date             Author            Version            Comments
+2/12/2016        Deepika M         1.0                Initial Development
+*****************************************************************************************************/
+public class OpportunityTriggerUtility extends TriggerUtility{
+    
+    //Initialize variables
+    public static Map<string,Id> priceBookMap = new Map <string,Id>();
+    public static Map<string,Id> getPricebookId(){ 
+        //retrieve pricebook id and name
+        if(priceBookMap.size() == 0){
+            for (Pricebook2 priceBook : [SELECT id ,name FROM Pricebook2 LIMIT 50000]){               
+                priceBookMap.put(priceBook.name,priceBook.Id);
+            }
+        }
+        return priceBookMap;
+    }//end of getpricebook
+    
+    //Method to fetch Strategic Opportunity Record
+    public static List<SAP_Strategic_Opportunity__c> statOppty = new List<SAP_Strategic_Opportunity__c>();
+    public static Boolean isFirstTime = true; // SFCF-1324
+    public static List<SAP_Strategic_Opportunity__c> getSAPStrategy(set<Id> oppIdSet){
+        //Get Startegic Opportunity Record based on the Opp Id
+        if(statOppty.isEmpty() && isFirstTime){
+            isFirstTime = false; //SFCF-1324
+            statOppty = [SELECT Id,Monthly_Recurring_Revenue__c, One_Time_Revenue__c, Stage__c, Lost_Monthly_Recurring__c, 
+                         Lost_One_Time_Revenue__c, Won_Monthly_Recurring__c, Won_One_Time_Revenue__c, 
+                         Pipeline_Monthly_Recurring_Revenue__c, Pipeline_One_Time_Revenue__c 
+                         FROM SAP_Strategic_Opportunity__c 
+                         WHERE Opportunity__r.ID IN : oppIdSet];
+        }        
+        return statOppty;
+    }//End of getSAPstrategy
+    
+    // Method To Avoid Recursive Update operation
+    public static boolean runOnce(){
+        boolean run = TRUE;
+        if(run){
+            run= FALSE;
+            return TRUE;
+        }else{
+            return run;
+        }
+    }//end of runOnce
+    
+    
+    //method to Fetch Quotes on opportunity
+    public static List<quote> getQuoteList (set<Id> opptyFinalSet){
+        //NER-686-Start
+        List<quote> quotelist = [select Id,OpportunityId,Status,ExpirationDate,(select id, Name from Attachments),(SELECT ContentDocumentId,ContentDocument.LatestPublishedVersionId FROM ContentDocumentLinks where ContentDocument.FileType != 'SNOTE'),(select id, RelatedRecordId from Feeds where Type='ContentPost') from Quote 
+                                 where OpportunityId in:opptyFinalSet]; 
+                                 
+        //NER-686-End
+        return quotelist;
+    }
+    
+    //Method to fecth team members on opportunity
+    public static List<OpportunityTeamMember> getTeamMembers(Set<Id> oppIdSet){
+        List<OpportunityTeamMember> oppTeamMember = new List<OpportunityTeamMember>();
+        
+        oppTeamMember = [SELECT id,Opportunityid,TeamMemberRole,OpportunityAccessLevel,Userid 
+                         FROM OpportunityTeamMember 
+                         WHERE Opportunityid IN: oppIdSet];
+        
+        return oppTeamMember;
+    }//end of team members 
+    
+    //Querying Parent opportunity list from cloned opportunities
+    public static List<Opportunity> getParentOppList(Map<Id,Id> clonedOppMap){
+        List<Opportunity> parentOpptyList = new List<Opportunity>();
+        parentOpptyList = [SELECT id,Unica_ID__c 
+                           FROM opportunity 
+                           WHERE id=:clonedOppMap.keyset() AND Unica_ID__c!='']; 
+        return parentOpptyList;
+    }
+    
+    //Querying campaigns from Parent opportunities
+    /*public static List<Campaign_Opportunity_Link__c> getCampaignOppList(List<Opportunity> parentOpptyList){
+        List<Campaign_Opportunity_Link__c> campaignOppList = new List<Campaign_Opportunity_Link__c>();
+        
+        campaignOppList = [SELECT id,Campaign__c,Opportunity__c 
+                           FROM Campaign_Opportunity_Link__c 
+                           WHERE Opportunity__c IN : parentOpptyList AND Campaign__r.Unica_ID__c!= ''];
+        
+        return campaignOppList;
+    } */
+    
+    //Querying campaign from genesis associate opportunities <--getgenesisCampaignOppList-->
+    /* public static List<Campaign_Opportunity_Link__c> getCampaignOppList(List<string> opprtunityIdList){
+        List<Campaign_Opportunity_Link__c> campaignOppList = new List<Campaign_Opportunity_Link__c>();
+        campaignOppList = [SELECT id,Campaign__c,Opportunity__c,Campaign__r.Unica_ID__c
+                                  FROM Campaign_Opportunity_Link__c 
+                                  WHERE Opportunity__c IN :opprtunityIdList];  
+        return campaignOppList;
+    }
+    */
+    //Querying campaign from genesis associate opportunities <--getgenesisCampaignOppList-->
+    //Added as part of GTT-1437 to include CampaignInfluence
+    public static List<CampaignInfluence> getCampInfluenceList(List<string> opprtunityIdList){
+        List<CampaignInfluence> campInfluList= new List<CampaignInfluence>();
+        campInfluList= [SELECT id,CampaignId, OpportunityId, ModelId, Campaign.Unica_ID__c
+                                  FROM CampaignInfluence
+                                  WHERE OpportunityId IN :opprtunityIdList];  
+        return campInfluList;
+    }
+    
+    //Method to fetch Opportunity related quote Records
+    /*public static List<Opportunity> getOpportunityRecords1(Map<Id,Id> quoteOptyIdMap){
+        List<Opportunity> lstOppQuoteRecords = new List<Opportunity>(); 
+        
+        lstOppQuoteRecords = [SELECT id,SyncedQuoteId,(SELECT id, Order_Type__c, recordtypeid,opportunityid,opportunity.Genesis_Migration_Flag__c, GRC_Quote_Flag__c 
+                                                       FROM quotes) 
+                              FROM opportunity 
+                              WHERE id in:quoteOptyIdMap.values()];
+        
+        return lstOppQuoteRecords;
+    }*/
+    
+    //Method to fetch the Opportunitylineitem records related to Opportunity
+    public static List<Opportunitylineitem> getOpptyLineItemRecords(Map<Id, Decimal> oppMap){
+        List<Opportunitylineitem> opptyLineItemRecs = new List<Opportunitylineitem>();
+        
+        opptyLineItemRecs  = [SELECT id, Opportunityid, QLI_Bill_Start_Date__c, QLI_Recurring_Total__c,Opportunity.tocExpectedRevenueDate__c  
+                              FROM Opportunitylineitem 
+                              WHERE opportunityid IN :oppMap.KeySet()];
+        
+        return opptyLineItemRecs;
+    }  
+        
+    //Method to fetch account and its parent account records which is associated with opportunity
+    public static Map<Id,Account> oppAccRecords = new Map<Id,Account> ();
+    public static Map<Id,Account> getOpportunityAccountRecords(Set<Id> oppAccIdSet){        
+        if(oppAccRecords.isEmpty()){
+            oppAccRecords = new Map<Id,Account>([SELECT Id,CurrencyIsoCode,Parent.Id,Parent.Legal_Entity__c,
+                                                 Parent.CurrencyIsoCode,Parent.tfCrmCountry__c,Ultimate_Parent_Account__r.Id ,Legal_Entity__c,tfCrmCountry__c,ShippingCountry
+                                                 FROM  Account  
+                                                 WHERE Id IN : oppAccIdSet]);
+        } 
+        return oppAccRecords;                         
+    }
+    
+    //Method to fetch custom account team from opportunity account id's
+    public static List<Custom_Account_Team__c> getCustomAccountTeamList(Set<Id> OppAccountIds){
+        List<Custom_Account_Team__c> customAccountTeamList = new List<Custom_Account_Team__c>();
+        //Adding null checker as part of SFCF-337
+        if(OppAccountIds!=null && !OppAccountIds.isEmpty()){
+        customAccountTeamList = [SELECT Account__r.id, Team_Member__c, Secondary_Team_Role__c, Id, Team_Role__c, Account__c 
+                                 FROM Custom_Account_Team__c 
+                                 WHERE  Account__c IN : OppAccountIds AND Secondary_Team_Role__c = 'Lead Client Specialist' AND Team_Member__r.isActive=TRUE ];
+        }
+        return customAccountTeamList;
+    }//end of method
+    
+    public static  List<GroupMember> groupMemberList = new List<GroupMember>();
+    public static list<GroupMember> groupMemberList(){
+        if(groupMemberList.isEmpty()){
+            if(!String.isEmpty(Label.FXall_Public_Group_Id)){
+                groupMemberList = [SELECT UserOrGroupId 
+                                   FROM GroupMember 
+                                   WHERE GroupId =:Label.FXall_Public_Group_Id];
+            }  
+        }      
+        return groupMemberList;
+    }
+    
+    public static List <Account> accuntsList = new List<Account> ();
+    public static list<Account> accountsList(Set<id> acctIds, Set<Id> oppIdSet){
+        if(accuntsList.isEmpty()){
+            accuntsList = [SELECT Id, (SELECT ID FROM Opportunities 
+                                       WHERE tfcrmType__c =: 'New User' AND FXall_Flag__c =: 'True'
+                                       AND StageName =: '7. Order Complete' AND ID NOT IN : oppIdSet)
+                           FROM Account 
+                           WHERE ID IN : acctIds];
+        }
+        return accuntsList;
+    }
+    
+    public static Map<Id,Account> getMapOpptyParent(List<Id> listAccountIds){
+        Map<Id,Account> parentAccMap = new Map<Id,Account>();
+        //Initialize variables
+        parentAccMap = new Map<Id, account>([SELECT id, FXall_Legal_Approval__c,FXall_Legal_Approval_Timestamp__c 
+                                             FROM account 
+                                             WHERE ID IN :listAccountIds]);
+        
+        return parentAccMap;
+    }
+    /*method added by sonal*/
+    public static list<Account> getAccountList (Set<String> accountIdSet){
+        List<Account> ultiAccountList = new List<Account>();
+        
+        ultiAccountList = [SELECT id,Ultimate_Parent_Account__c,Parentid 
+                           FROM Account 
+                           WHERE id IN:accountIdSet];
+        return ultiAccountList;
+    }//end of method
+    
+    public static list<Account> getAccountsList (Set<String> hierarchyAccount){
+        List<Account> ultiAccuntList = new List<Account>();
+        //Adding null condition as part of SFCF-337
+        if(hierarchyAccount!=null && !hierarchyAccount.isEmpty()){
+        
+        ultiAccuntList = [SELECT id 
+                          FROM Account 
+                          WHERE Ultimate_Parent_Account__c = :hierarchyAccount];
+        }
+        return ultiAccuntList;
+    }
+    
+    public static list<Opportunity> updateOpptyList (Set<Id> oppIdSet){
+        List<Opportunity> upadateOpptortunityList = new List<Opportunity>();
+        
+        upadateOpptortunityList = [SELECT id,name,Associated_Id__c,Associated_Opportunity__r.Ultimate_Parent_Oportunity__c,
+                                   Ultimate_Parent_Opportunity__c,Ultimate_Parent_Oportunity__c,tocExpectedRevenueDate__c 
+                                   FROM Opportunity 
+                                   WHERE id IN:oppIdSet];
+        system.debug('opportunity records on after insert'+ upadateOpptortunityList);
+        return upadateOpptortunityList;
+    }
+    
+    public static List <Account> acctsList = new List<Account> ();
+    public static list<Account> accLists(Set<String> acctIds){
+        if(acctsList.isEmpty()){
+            acctsList = [ SELECT id, NOM_Customer_Group__c FROM account WHERE ID IN :acctIds];
+        }
+        return acctsList;
+    }
+    /*end by sonal*/
+    
+    //ramya-- 
+    //Query PartnerNetworkConnection records with ConnectionStatus = 'Accepted'
+   /* public static List<PartnerNetworkConnection> partnerNetworkconList =new List<PartnerNetworkConnection>();
+    public static List<PartnerNetworkConnection> getPartnerNetworkconList() {
+        if(partnerNetworkconList != null && partnerNetworkconList.size() > 0){
+            partnerNetworkconList = [SELECT Id, ConnectionStatus, ConnectionName 
+                                     FROM PartnerNetworkConnection 
+                                     WHERE ConnectionStatus = 'Accepted'];
+        }
+        return partnerNetworkconList ;
+    }*/
+    
+    //Query Partner role from Account
+    public static Map<Id,Account> accountPartnerRoleMap  = new Map<Id,Account>(); 
+    public static Map<Id,Account> getaccountPartnerRoleMap(set<id> accountIds){
+        
+        for (Account acc : [select id,Partner_Role__c from Account where id in :accountIds and Partner_Role__c = null]){            
+            accountPartnerRoleMap.put(acc.id,acc);               
+        }   
+        return accountPartnerRoleMap; 
+    } 
+    
+    //Query currency from account
+    public static Map<Id,Account> accountCurrencyMap = new Map<Id,Account>(); 
+    public static Map<Id,Account> getAccountcurrency(set<id> accountIds){
+        
+        for(List<Account> accList : [select Id,CurrencyIsoCode from Account where Id IN:accountIds]){  
+            for (Account acc: accList) {  
+                accountCurrencyMap.put(acc.id,acc);
+            }
+        }
+        return accountCurrencyMap;  
+    } 
+    
+    
+    //Query Opportunity Lineitem
+    public static List<OpportunityLineItem> oppLineitemList = new  List<OpportunityLineItem>(); 
+    public static  List<OpportunityLineItem> getOppLineitemList(Map<Id,Opportunity> newOpptyMap,Map<Id,Opportunity> revCurOpptyMap){
+        
+        oppLineitemList= [Select OpportunityId, Install_To__c, Id
+                          From OpportunityLineItem 
+                          where OpportunityId IN:newOpptyMap.KeySet() or OpportunityId IN:revCurOpptyMap.KeySet()]; 
+        
+        return oppLineitemList; 
+    }
+    
+    //Query Opp name and Accid 
+    public static Map<String,Opportunity> existingOppNameMap  = new Map<String,Opportunity>(); 
+    public static Map<String,Opportunity> getExistingOppNameMap(Map<String,Id> newOppNameMap){
+    //Adding null condition as part of SFCF-337
+    if(newOppNameMap!= null && !newOppNameMap.isEmpty()){
+        
+        for(Opportunity opp: [select AccountId,Name from Opportunity where Name In :newOppNameMap.keyset() and AccountId IN :newOppNameMap.values()]){
+            existingOppNameMap.put(opp.Name + '/' + opp.AccountId,opp);         
+        }
+        }
+        return existingOppNameMap; 
+    } //--ramya 
+    
+    //method to return opportunity record based on Ultimate_Parent_Opportunity__c
+    public static List<Opportunity> opportunityList = new List<Opportunity>();
+    public static List<Opportunity> getOpportunityRecords(List<Id> opportunityIds){
+        if(opportunityList.isEmpty()){
+            opportunityList = [select id,Associated_Id__c,Associated_Opportunity__c,Ultimate_Parent_Oportunity__c,Ultimate_Parent_Opportunity__c 
+                               From Opportunity
+                               Where Ultimate_Parent_Opportunity__c IN: opportunityIds];
+        } system.debug('records values'+ opportunityList);
+        return  opportunityList;
+    }
+    
+    //method to return opportunity record for expected revenue updation
+    public static List<Opportunity> lstOpportunityExpectedRevenue = new List<Opportunity>();
+    public static List<Opportunity> getOpportunityForExpectedRevenue(Set<Id> opportunityIdsForSS7){
+       lstOpportunityExpectedRevenue = [Select id, tocExpectedRevenueDate__c  from Opportunity 
+                                    where id IN :opportunityIdsForSS7];
+        
+        return  lstOpportunityExpectedRevenue;
+    }
+    
+    //method to return opportunity record for  setInstallFilter
+    public static Map<Id,Opportunity> mapOppRecords_setInstallFilterOLI = new  Map<Id,Opportunity>();
+    public static Map<Id,Opportunity> getOpportunityLineItemsForSetInstallFilterOLI(Set<Id> setInstallFilterOLI){
+        mapOppRecords_setInstallFilterOLI =new Map<Id,Opportunity>([select id, Accountid, AccountAssociatedWith__c,AccountAssociatedWith__r.AccountNumber, Account.AccountNumber,
+                                         GRC_Opportunity__c  from Opportunity where id = :setInstallFilterOLI]);
+      
+        return mapOppRecords_setInstallFilterOLI;
+    }
+     //method to return opportunity record for relatedopps
+    public static Map<Id,Opportunity> mapOppRecords_RelatedOppIDs = new  Map<Id,Opportunity>();
+    public static Map<Id,Opportunity> getOpportunityLineItemsForRelatedOpportunityIDs(Set<Id> OLIRelatedOpportunityIDs){
+    
+        if(mapOppRecords_RelatedOppIDs == null || mapOppRecords_RelatedOppIDs.isEmpty()){
+            mapOppRecords_RelatedOppIDs =new Map<Id,Opportunity>([Select Trial_Opportunity__c,id,StageName, tfcrmMkt__c,Genesis_Flag__c,PriceBook2ID,trActiveQuoteInd__c,GRC_Opportunity__c,Quote_Status__c,
+                                                    syncedQuoteid,Deal_Type__c,Type__c  from Opportunity Where Id IN :OLIRelatedOpportunityIDs]);
+      }
+       return mapOppRecords_RelatedOppIDs;
+    }
+    
+                                                        
+    //method to return opportunity record for SyncOpps
+    public static Map<Id,Opportunity> mapSyncOpp = new  Map<Id,Opportunity>();
+    public static Map<Id,Opportunity> getOpportunityLineItemsForSyncOpps(Set<Id> setOppToOli){
+            mapSyncOpp =new Map<Id,Opportunity>([select id, SyncedQuoteId from Opportunity where Id in :setOppToOli and SyncedQuoteId != null]);
+      
+        return mapSyncOpp;
+    }
+    
+    //method to fetch the ultimate parent on opportunity with Associated_Id__c as search key
+    public static Map<Id,Id> mapAssociateId (List<String> associatedIdList){
+    Map<Id,Id> oppUltimateParentMap = new Map<Id,Id> ();
+    //Added null condition as part of SFCF-337
+    if(associatedIdList!=null && !associatedIdList.isEmpty()){
+        List<Opportunity> opporList = [select id,Ultimate_Parent_Oportunity__c from Opportunity where id in :associatedIdList];
+        
+        for(Opportunity opp : opporList){
+            string oppId = opp.Id;
+            oppUltimateParentMap.put(oppId.left(15), opp.Ultimate_Parent_Oportunity__c );
+             
+        }
+        }
+        return oppUltimateParentMap;
+    }   
+      
+    public static List<Opportunity_Validations__mdt> opportunityvalidationmtd(){
+            //Start- Code Optimization-prod issue - Nitish
+            /*List<Opportunity_Validations__mdt> Opportunityvalidatnmdt=[Select DeveloperName,Field_Value__c,Field_API__c  from Opportunity_Validations__mdt 
+                where label = 'Mandate Team Role' OR label = 'Mandate CSM Handoff Notes']; //GTT-3088*/
+            List<Opportunity_Validations__mdt> Opportunityvalidatnmdt= new List<Opportunity_Validations__mdt>();
+            Map<String, Opportunity_Validations__mdt> mapOptyValdiationmdt = Opportunity_Validations__mdt.getAll();
+            if(mapOptyValdiationmdt != null){
+                for(Opportunity_Validations__mdt Optymdt: mapOptyValdiationmdt.values()){
+                    if(Optymdt.label == 'Mandate Team Role' || Optymdt.label == 'Mandate CSM Handoff Notes'){
+                    Opportunityvalidatnmdt.add(Optymdt);
+                }
+            }
+            }
+            //End- Code Optimization-prod issue - Nitish
+        
+       return Opportunityvalidatnmdt;
+}
+    
+public static Map<Id, String> getPartnerRole(MAp<Id, id> opppartnerNameid){    
+                Map<id, string> oppPartnerRolemap=new Map<id, string>();
+                List<String> ListoppPartnertype= new List<String>();
+                Map<id, Partner_Accounts__c> partnerType =new Map<id, Partner_Accounts__c>([Select id, name, AccountID__r.Partner_Role__c from Partner_Accounts__c where id in : opppartnerNameid.values()]);    
+                Schema.DescribeFieldResult fieldResult = Opportunity.Partner_role__c.getDescribe();
+                List<Schema.PicklistEntry> ple = fieldResult.getPicklistValues();               
+                   for( Schema.PicklistEntry pickListVal : ple){
+                        ListoppPartnertype.add(pickListVal.getLabel());
+                        }     
+                  for(Id i: opppartnerNameid.keyset()) {
+                     if(partnerType.get(opppartnerNameid.get(i))!= null && partnerType.get(opppartnerNameid.get(i)).AccountID__r.Partner_Role__c != null && partnerType.get(opppartnerNameid.get(i)).AccountID__r.Partner_Role__c != ''){
+                        list<string> partnerRole =partnerType.get(opppartnerNameid.get(i)).AccountID__r.Partner_Role__c.split(';');
+                        partnerRole.sort();
+                    for(String PartnerValue : partnerRole) {
+                         if(ListoppPartnertype.contains(PartnerValue)){
+                                oppPartnerRolemap.put(i,PartnerValue);
+                                break;
+                                          } 
+                                       }
+                                  }  
+        }  
+         return oppPartnerRolemap;
+                
+                    
+       
+
+}}
