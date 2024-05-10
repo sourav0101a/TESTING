@@ -1,0 +1,8 @@
+   public static List<OpportunityTeamMember> getTeamMembers(Set<Id> oppIdSet){
+        List<OpportunityTeamMember> oppTeamMember = new List<OpportunityTeamMember>();
+        
+        oppTeamMember = [SELECT id,Opportunityid,TeamMemberRole,OpportunityAccessLevel,Userid 
+                         FROM OpportunityTeamMember 
+                         WHERE Opportunityid IN: oppIdSet];
+        
+        return oppTeamMember;
