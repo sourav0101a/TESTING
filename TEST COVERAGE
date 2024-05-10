@@ -1,0 +1,46 @@
+@isTest
+private class Test_OpportunityTriggerUtility {
+
+    static testMethod void testCompareAccountsAndUpdateProductCurrency() {
+        // Create test data
+        Account acc = new Account(Name = 'Test Account', CurrencyIsoCode = 'USD');
+        insert acc;
+
+        // Create old opportunity
+        Opportunity oldOppty = new Opportunity(Name = 'Old Opportunity', StageName = 'Prospecting', CloseDate = Date.today(), AccountId = acc.Id);
+        insert oldOppty;
+
+        // Create new opportunity
+        Opportunity newOppty = new Opportunity(Name = 'New Opportunity', StageName = 'Qualification', CloseDate = Date.today(), AccountId = acc.Id);
+        insert newOppty;
+
+        // Create old opportunity line item
+        OpportunityLineItem oldOli = new OpportunityLineItem(OpportunityId = oldOppty.Id, Quantity = 1, UnitPrice = 100, PricebookEntryId = Test.getStandardPricebookId());
+        insert oldOli;
+
+        // Create new opportunity line item
+        OpportunityLineItem newOli = new OpportunityLineItem(OpportunityId = newOppty.Id, Quantity = 2, UnitPrice = 200, PricebookEntryId = Test.getStandardPricebookId());
+        insert newOli;
+
+        // Create revCurOpptyMap with oldOppty
+        Map<Id, Opportunity> revCurOpptyMap = new Map<Id, Opportunity>{oldOppty.Id => oldOppty};
+
+        // Create newOpptyMap with newOppty
+        Map<Id, Opportunity> newOpptyMap = new Map<Id, Opportunity>{newOppty.Id => newOppty};
+
+        Test.startTest();
+        // Call the method under test
+        List<Opportunity> newOpportunities = new List<Opportunity>{newOppty};
+        Map<Id, Opportunity> oldOpptyMap = new Map<Id, Opportunity>{oldOppty.Id => oldOppty};
+        Set<Id> accIds = new Set<Id>{acc.Id};
+        YourClass.compareAccountsAndUpdateProductCurrency(newOpportunities, oldOpptyMap, accIds);
+        Test.stopTest();
+
+        // Add assertions here to verify the behavior of your method
+        // For example, check if the OpportunityLineItem fields were updated as expected
+        OpportunityLineItem updatedOli = [SELECT Install_To__c, tfcrmProposedPriceMonthly__c, tfcrmOldPriceMonthly__c FROM OpportunityLineItem WHERE OpportunityId = :newOppty.Id];
+        System.assertEquals(acc.Id, updatedOli.Install_To__c);
+        System.assertEquals(0, updatedOli.tfcrmProposedPriceMonthly__c);
+        System.assertEquals(0, updatedOli.tfcrmOldPriceMonthly__c);
+    }
+}
