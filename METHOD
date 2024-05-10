@@ -6,3 +6,51 @@
                          WHERE Opportunityid IN: oppIdSet];
         
         return oppTeamMember;
+
+
+
+
+
+
+
+
+
+
+@isTest
+private class Test_OpportunityTriggerUtility {
+
+    static testMethod void testGetTeamMembers() {
+        // Create test data
+        Account acc = new Account(Name = 'Test Account');
+        insert acc;
+
+        Opportunity opp = new Opportunity(Name = 'Test Opportunity', AccountId = acc.Id);
+        insert opp;
+
+        // Insert Opportunity Team Members
+        List<OpportunityTeamMember> oppTeamMembers = new List<OpportunityTeamMember>{
+            new OpportunityTeamMember(OpportunityId = opp.Id, TeamMemberRole = 'Role 1', OpportunityAccessLevel = 'Read', UserId = UserInfo.getUserId()),
+            new OpportunityTeamMember(OpportunityId = opp.Id, TeamMemberRole = 'Role 2', OpportunityAccessLevel = 'Edit', UserId = '005XXXXXXXXXXXXXX'), // Change to a valid UserId
+            // Add more Opportunity Team Members as needed
+        };
+        insert oppTeamMembers;
+
+        Test.startTest();
+        // Call the method under test
+        Set<Id> oppIdSet = new Set<Id>{opp.Id};
+        List<OpportunityTeamMember> result = YourClass.getTeamMembers(oppIdSet);
+        Test.stopTest();
+
+        // Add assertions here to verify the behavior of your method
+        System.assertEquals(2, result.size()); // Ensure correct number of Opportunity Team Members is returned
+
+        // Example assertions for individual Opportunity Team Members
+        System.assertEquals(opp.Id, result[0].OpportunityId);
+        System.assertEquals('Role 1', result[0].TeamMemberRole);
+        System.assertEquals('Read', result[0].OpportunityAccessLevel);
+        System.assertEquals(UserInfo.getUserId(), result[0].UserId);
+
+        System.assertEquals(opp.Id, result[1].OpportunityId);
+        System.assertEquals('Role 2', result[1].TeamMemberRole);
+        System.assertEquals('Edit', result[1].OpportunityAccessLevel);
+        System.assertEquals('005XXXXXXXXXXXXXX', result[1].UserId); // Change
