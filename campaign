@@ -1,0 +1,43 @@
+    public static void opptyCampaignAssociation(Map<id,id> clonedOppMap,Map<id,String> genesisOppMap){
+        
+        List<opportunity> parentOpptyList = new List<opportunity>();
+        //List<Campaign_Opportunity_Link__c> campaignInsertList = new List<Campaign_Opportunity_Link__c>();
+        LIST<CampaignInfluence> insertCapInfluList= new List<CampaignInfluence>();
+        //fetching all opportunity id and storing it in list<string>
+        List<String> oppIdList = new List<String>();
+
+        //Reading Parent Opportunities of UnicaId is Not Null
+        if(!clonedOppMap.isEmpty()){
+            parentOpptyList = OpportunityTriggerUtility.getParentOppList(clonedOppMap);
+
+            //  preparing campaignInsertList for associating campaigns to cloned opportunity
+            if(!parentOpptyList.isEmpty()){
+
+                for(Opportunity opp : parentOpptyList){
+                    oppIdList.add(opp.Id);
+                }
+                // Reading Parent opportunities Campaign records and associating campaigns to cloned Opportunities
+                for(CampaignInfluence campInfluRec : OpportunityTriggerUtility.getCampInfluenceList(oppIdList)){
+                    if(clonedOppMap.get(campInfluRec.OpportunityId )!=null && campInfluRec.Campaign.Unica_ID__c != ''){
+                        CampaignInfluence campInfluNewRec= new CampaignInfluence (OpportunityId = clonedOppMap.get(campInfluRec.OpportunityId ), CampaignId = campInfluRec.CampaignId, ModelId= campInfluRec.ModelId);
+                        insertCapInfluList.add(campInfluNewRec);
+                    }
+                }
+            }
+        }
+        if(!genesisOppMap.isEmpty()){
+            // Reading Associated/Parent opportunities Campaign records and associating to new Opportunities
+            for(CampaignInfluence campInfluRec: OpportunityTriggerUtility.getCampInfluenceList(genesisOppMap.values())){
+                for(id oppty : genesisOppMap.keyset()){
+                    CampaignInfluence camInfluNewRec = new CampaignInfluence (OpportunityId = oppty, CampaignId = campInfluRec.CampaignId, ModelId= campInfluRec.ModelId);
+                    insertCapInfluList.add(camInfluNewRec);
+                }
+            }
+        }
+
+        if(!insertCapInfluList.isEmpty()){
+            // Creating Associated campaigns of Cloned and genesis trial opportunities
+            insert insertCapInfluList;
+        }
+        
+    }
