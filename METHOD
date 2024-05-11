@@ -17,40 +17,67 @@
 
 
 @isTest
-private class Test_OpportunityTriggerUtility {
-
-    static testMethod void testGetTeamMembers() {
+private class OppQuoteLineItemsSyncTest {
+    @isTest
+    static void testOppQuoteLineItemsSync() {
         // Create test data
-        Account acc = new Account(Name = 'Test Account');
-        insert acc;
-
-        Opportunity opp = new Opportunity(Name = 'Test Opportunity', AccountId = acc.Id);
+        Opportunity opp = new Opportunity(Name = 'Test Opp', StageName = 'Prospecting', CloseDate = Date.today());
         insert opp;
 
-        // Insert Opportunity Team Members
-        List<OpportunityTeamMember> oppTeamMembers = new List<OpportunityTeamMember>{
-            new OpportunityTeamMember(OpportunityId = opp.Id, TeamMemberRole = 'Role 1', OpportunityAccessLevel = 'Read', UserId = UserInfo.getUserId()),
-            new OpportunityTeamMember(OpportunityId = opp.Id, TeamMemberRole = 'Role 2', OpportunityAccessLevel = 'Edit', UserId = '005XXXXXXXXXXXXXX'), // Change to a valid UserId
-            // Add more Opportunity Team Members as needed
-        };
-        insert oppTeamMembers;
+        Pricebook2 standardPricebook = [SELECT Id FROM Pricebook2 WHERE IsStandard = true LIMIT 1];
 
+        PricebookEntry pbe = new PricebookEntry(
+            Pricebook2Id = standardPricebook.Id,
+            Product2Id = Test.getStandardPricebookEntry().Product2Id,
+            UnitPrice = 100.00,
+            IsActive = true
+        );
+        insert pbe;
+
+        Quote quote = new Quote(
+            Name = 'Test Quote',
+            OpportunityId = opp.Id,
+            Pricebook2Id = standardPricebook.Id,
+            Status = 'Draft'
+        );
+        insert quote;
+
+        QuoteLineItem qli = new QuoteLineItem(
+            QuoteId = quote.Id,
+            PricebookEntryId = pbe.Id,
+            UnitPrice = 100.00,
+            Quantity = 1,
+            Discount = 0,
+            SortOrder = 1
+        );
+        insert qli;
+
+        OpportunityLineItem oli = new OpportunityLineItem(
+            OpportunityId = opp.Id,
+            PricebookEntryId = pbe.Id,
+            UnitPrice = 100.00,
+            Quantity = 1,
+            Discount = 0,
+            SortOrder = 1
+        );
+        insert oli;
+
+        Map<Id, Id> syncQuoteMap = new Map<Id, Id>();
+        syncQuoteMap.put(quote.Id, opp.Id);
+
+        // Call the method to be tested
         Test.startTest();
-        // Call the method under test
-        Set<Id> oppIdSet = new Set<Id>{opp.Id};
-        List<OpportunityTeamMember> result = YourClass.getTeamMembers(oppIdSet);
+        OppQuoteLineItemsSync(syncQuoteMap);
         Test.stopTest();
 
-        // Add assertions here to verify the behavior of your method
-        System.assertEquals(2, result.size()); // Ensure correct number of Opportunity Team Members is returned
+        // Retrieve the updated Opportunity Line Item
+        OpportunityLineItem updatedOli = [SELECT Id FROM OpportunityLineItem WHERE Id = :oli.Id];
 
-        // Example assertions for individual Opportunity Team Members
-        System.assertEquals(opp.Id, result[0].OpportunityId);
-        System.assertEquals('Role 1', result[0].TeamMemberRole);
-        System.assertEquals('Read', result[0].OpportunityAccessLevel);
-        System.assertEquals(UserInfo.getUserId(), result[0].UserId);
-
-        System.assertEquals(opp.Id, result[1].OpportunityId);
-        System.assertEquals('Role 2', result[1].TeamMemberRole);
-        System.assertEquals('Edit', result[1].OpportunityAccessLevel);
-        System.assertEquals('005XXXXXXXXXXXXXX', result[1].UserId); // Change
+        // Assert that the Opportunity Line Item was updated as expected
+        System.assertEquals(qli.PricebookEntryId, updatedOli.PricebookEntryId);
+        System.assertEquals(qli.UnitPrice, updatedOli.UnitPrice);
+        System.assertEquals(qli.Quantity, updatedOli.Quantity);
+        System.assertEquals(qli.Discount, updatedOli.Discount);
+        System.assertEquals(qli.SortOrder, updatedOli.SortOrder);
+    }
+}
