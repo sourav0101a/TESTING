@@ -40,3 +40,5 @@ public class OpportunityTriggerUtilityTest {
         // Add assertions if needed
     }
 }
+
+IF(ISBLANK(Likely_Restoration_Time__c),"Unpopulated", IF (Likely_Restoration_Time__c < NOW(),"Breached", IF((Likely_Restoration_Time__c - NOW())*1440 <60,"Approaching Breach","Ok")))
