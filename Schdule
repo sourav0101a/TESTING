@@ -1,0 +1,43 @@
+public class UpdateCaseEstimate {
+
+    public static void updateCaseEstimate() {
+        // Map to store cases that need to be updated with specific fields
+        Map<Id, Case> casesToUpdateWithSpecificFields = new Map<Id, Case>();
+        // Map to store cases that need to be updated with other fields
+        Map<Id, Case> casesToUpdateWithOtherFields = new Map<Id, Case>();
+
+        // Query cases where estimate_resolution_time__c is less than 12 hours remaining
+        for (Case c : [SELECT Id, estimate_resolution_time__c, cause, diagnosis
+                        FROM Case 
+                        WHERE estimate_resolution_time__c < :DateTime.now().addHours(12)]) {
+
+            // Update estimate_resolution_time__c by adding 7 days
+            c.estimate_resolution_time__c = c.estimate_resolution_time__c.addDays(7);
+
+            // Check cause and diagnosis fields
+            if (c.cause == 'Production not Part of LSEG' && c.diagnosis == 'Content Not available') {
+                // Set fields if cause is 'Production not Part of LSEG' and diagnosis is 'Content Not available'
+                c.Some_Field__c = 'Value1';
+                c.Another_Field__c = 'Value2';
+                // Add to the map of cases to update with specific fields
+                casesToUpdateWithSpecificFields.put(c.Id, c);
+            } else {
+                // Set other fields
+                c.Some_Field__c = 'OtherValue1';
+                c.Another_Field__c = 'OtherValue2';
+                // Add to the map of cases to update with other fields
+                casesToUpdateWithOtherFields.put(c.Id, c);
+            }
+        }
+
+        // Update the cases with specific fields
+        if (!casesToUpdateWithSpecificFields.isEmpty()) {
+            update casesToUpdateWithSpecificFields.values();
+        }
+
+        // Update the cases with other fields
+        if (!casesToUpdateWithOtherFields.isEmpty()) {
+            update casesToUpdateWithOtherFields.values();
+        }
+    }
+}
