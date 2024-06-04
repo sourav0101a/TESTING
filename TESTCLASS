@@ -1,0 +1,61 @@
+@isTest
+private class TestSalesSchdulableERTUpdate {
+
+    static testMethod void testUpdateCaseEstimate() {
+        // Create test data
+        Case testCase = new Case(
+            Likely_Restoration_Time__c = DateTime.now().addDays(1),
+            Cause__c = 'Production - Not Part of LSEG Offering',
+            Diagnosis_Summary__c = 'Content Not Available',
+            Number_of_Instruments_Queried__c = 5,
+            Case_Owner_Name__c = 'Test Owner',
+            Status = 'Open',
+            Case_Owner_Role_Static__c = 'CONT_ST_RPS'
+        );
+        insert testCase;
+
+        Test.startTest();
+
+        // Run scheduled job
+        Test.startTest();
+        SalesSchdulableERTUpdate.updateCaseEstimate();
+        Test.stopTest();
+
+        // Verify the expected changes
+        Case updatedCase = [SELECT Id, Likely_Restoration_Time__c, Status, Market_Sector__c FROM Case WHERE Id = :testCase.Id];
+        System.assertEquals(testCase.Likely_Restoration_Time__c.addDays(7), updatedCase.Likely_Restoration_Time__c);
+        System.assertEquals('Service Restored', updatedCase.Status);
+        System.assertEquals('TR Pricing Services', updatedCase.Market_Sector__c);
+
+        // Verify that email is sent and fields are updated
+        System.assertNotEquals(null, updatedCase.Resolution_Comment__c);
+
+        Test.stopTest();
+    }
+
+    static testMethod void testNoCasesToUpdate() {
+        // Create test data with no cases meeting the criteria
+        Case testCase = new Case(
+            Likely_Restoration_Time__c = DateTime.now().addDays(10),
+            Cause__c = 'Production - Not Part of LSEG Offering',
+            Diagnosis_Summary__c = 'Content Not Available',
+            Number_of_Instruments_Queried__c = 5,
+            Case_Owner_Name__c = 'Test Owner',
+            Status = 'Open',
+            Case_Owner_Role_Static__c = 'CONT_ST_RPS'
+        );
+        insert testCase;
+
+        Test.startTest();
+
+        // Run scheduled job
+        SalesSchdulableERTUpdate.updateCaseEstimate();
+
+        Test.stopTest();
+
+        // Verify no changes
+        Case unchangedCase = [SELECT Id, Likely_Restoration_Time__c, Status FROM Case WHERE Id = :testCase.Id];
+        System.assertEquals(testCase.Likely_Restoration_Time__c, unchangedCase.Likely_Restoration_Time__c);
+        System.assertEquals('Open', unchangedCase.Status);
+    }
+}
