@@ -1,41 +1,84 @@
-public class UpdateCaseEstimate {
+public class SalesSchdulableERTUpdate {
 
-    public static void updateCaseEstimate() {
+    public static void updateCaseEstimate(){
         // List to store cases that need to be updated
         List<Case> casesToUpdate = new List<Case>();
-
+        DateTime currentDateTime = DateTime.now().addHours(12);
+        system.debug('DateTime.now().addHours(12) ' + currentDateTime);
+        List<case> DateVAlue = new list<Case>();
+        
+        //DateVAlue = [SELECT Id, Likely_Restoration_Time__c FROM Case where CaseNumber='13520971'];
+        //system.debug('DateVAlue ' + DateVAlue[0].Likely_Restoration_Time__c);
+        //system.debug('Likely_Restoration_Time__c ' + Likely_Restoration_Time__c);
         // Query cases where estimate_resolution_time__c is less than 12 hours remaining
-        for (Case c : [SELECT Id, estimate_resolution_time__c, cause, diagnosis
+        for (Case c : [SELECT Id, Likely_Restoration_Time__c, Cause__c, Diagnosis_Summary__c,Number_of_Instruments_Queried__c,Case_Owner_Name__c
                         FROM Case 
-                        WHERE estimate_resolution_time__c < :DateTime.now().addHours(12)]) {
+                        WHERE Likely_Restoration_Time__c < :currentDateTime AND Case_Owner_Role_Static__c ='CONT_ST_RPS' 
+                        AND
+                        Status NOT IN ('Closed','Cancelled','Unresolved','Service Restored')] ) {
 
             // Update estimate_resolution_time__c by adding 7 days
-            c.estimate_resolution_time__c = c.estimate_resolution_time__c.addDays(7);
+            c.Likely_Restoration_Time__c = c.Likely_Restoration_Time__c.addDays(7);
+                            system.debug('Likely_Restoration_Time__c Value ' + c.Likely_Restoration_Time__c);
             casesToUpdate.add(c);
         }
-
         // Update the estimate_resolution_time__c field for all cases meeting the criteria
         if (!casesToUpdate.isEmpty()) {
             update casesToUpdate;
         }
-
+        List<Case> casesToUpdateFields = new List<Case>();
         // Loop through cases again to update fields based on condition
         for (Case c : casesToUpdate) {
+            system.debug('Inside if else condition ' + c);
+            Messaging.SingleEmailMessage email = new Messaging.SingleEmailMessage();
+            email.setTemplateId('00X8D000003Kel9UAC');
+            email.setTargetObjectId(c.Id);
+            email.setWhatId(c.Id);
+            email.setSaveAsActivity(false); // Check with True Also
+            
+            email.setHtmlBody('<p>Case Owner Name:' + c.Case_Owner_Name__c);
             // Check cause and diagnosis fields
-            if (c.cause == 'Production not Part of LSEG' && c.diagnosis == 'Content Not available') {
-                // Set fields if cause is 'Production not Part of LSEG' and diagnosis is 'Content Not available'
-                c.Some_Field__c = 'Value1';
-                c.Another_Field__c = 'Value2';
-            } else {
-                // Set other fields
-                c.Some_Field__c = 'OtherValue1';
-                c.Another_Field__c = 'OtherValue2';
+            if(c.Cause__c =='Production - Not Part of LSEG Offering' && c.Diagnosis_Summary__c =='Content Not Available' &&
+               c.Number_of_Instruments_Queried__c > 0){
+                c.Status = 'Service Restored';
+                c.Market_Sector__c = 'TR Pricing Services';
+                c.Market_sector_Sub_Type_1__c = 'FixedIncome';
+                c.Resolution_Code__c = 'New Data Added by LSEG to Existing Market';
+                c.Data_Field__c = 'Pricing Services';
+                c.Data_Source_Name__c = 'EJV';
+                c.Data_Source_Country__c = 'Global';
+                system.debug('Inside if NEW PROD' + c);
+                   
+            } else if (c.Cause__c =='Source - Lack of Information/Source' && c.Diagnosis_Summary__c =='Content Not Available' &&
+                        c.Number_of_Instruments_Queried__c > 0){
+                c.Status = 'Service Restored';
+                c.Market_Sector__c = 'TR Pricing Services';
+                c.Market_sector_Sub_Type_1__c = 'FixedIncome';
+                c.Resolution_Code__c = 'Data Not Added by LSEG';
+                c.Data_Field__c = 'Pricing Services';
+                c.Data_Source_Name__c = 'EJV';
+                c.Data_Source_Country__c = 'Global';
+                system.debug('Inside if else NEW SOURCE' + c);
+                            
+            } else if (c.Cause__c =='Content Explanation' && c.Diagnosis_Summary__c =='Content Explanation' && 
+                       c.Number_of_Instruments_Queried__c > 0){
+                c.Status = 'Service Restored';
+                c.Market_Sector__c = 'TR Pricing Services';
+                c.Market_sector_Sub_Type_1__c = 'FixedIncome';
+                c.Resolution_Code__c = 'Data confirmed as correct';
+                c.Data_Field__c = 'Pricing Services';
+                c.Data_Source_Name__c = 'EJV';
+                c.Data_Source_Country__c = 'Global';
+                c.Content_Type__c = 'Price Challenge/variance';
+                c.Resolution_Comment__c = email.getHtmlBody();          
+                system.debug('Inside if else NEW' + c);
+                system.debug('Inside if else NEW 0.1' + c.Resolution_Comment__c);
             }
+                casesToUpdateFields.add(c);
         }
-
-        // Update the cases with the updated fields
-        if (!casesToUpdate.isEmpty()) {
-            update casesToUpdate;
+        if (!casesToUpdateFields.isEmpty()) {
+            update casesToUpdateFields;
         }
+        
     }
 }
