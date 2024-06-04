@@ -1,4 +1,4 @@
-global class SalesSchdulableERTUpdate implements Schedulable {
+global class ServiceSchdulableERTUpdate implements Schedulable {
 
     global void execute(SchedulableContext sc) {
         updateCaseEstimate();
@@ -7,14 +7,14 @@ global class SalesSchdulableERTUpdate implements Schedulable {
     public static void updateCaseEstimate(){
         // List to store cases that need to be updated
         List<Case> casesToUpdate = new List<Case>();
+        System.debug('DateTime.now() Value' + DateTime.now());
         DateTime currentDateTime = DateTime.now().addHours(12);
         System.debug('DateTime.now().addHours(12) ' + currentDateTime);
         
         // Query cases where estimate_resolution_time__c is less than 12 hours remaining
         for (Case c : [SELECT Id, Likely_Restoration_Time__c, Cause__c, Diagnosis_Summary__c, Number_of_Instruments_Queried__c, Case_Owner_Name__c
-                        FROM Case 
-                        WHERE Likely_Restoration_Time__c < :currentDateTime AND Case_Owner_Role_Static__c ='CONT_ST_RPS' 
-                        AND
+                        FROM Case WHERE Likely_Restoration_Time__c < :currentDateTime AND
+                        Case_Owner_Role_Static__c ='CONT_ST_RPS' AND
                         Status NOT IN ('Closed','Cancelled','Unresolved','Service Restored')]) {
 
             // Update estimate_resolution_time__c by adding 7 days
@@ -28,6 +28,7 @@ global class SalesSchdulableERTUpdate implements Schedulable {
         }
         
         List<Case> casesToUpdateFields = new List<Case>();
+        List<EmailTemplate> emailTemplateList = [SELECT Id, Body from EmailTemplate where Id = '00X8D000003Kel9UAC'];
         // Loop through cases again to update fields based on condition
         for (Case c : casesToUpdate) {
             System.debug('Inside if else condition ' + c);
@@ -36,8 +37,8 @@ global class SalesSchdulableERTUpdate implements Schedulable {
             email.setTargetObjectId(c.Id);
             email.setWhatId(c.Id);
             email.setSaveAsActivity(false); // Check with True Also
-            
-            email.setHtmlBody('<p>Case Owner Name:' + c.Case_Owner_Name__c);
+            email.setHtmlBody(emailTemplateList.get(0).Body);
+            //email.setHtmlBody('<p>Case Owner Name:' + c.Case_Owner_Name__c);
             // Check cause and diagnosis fields
             if(c.Cause__c =='Production - Not Part of LSEG Offering' && c.Diagnosis_Summary__c =='Content Not Available' &&
                c.Number_of_Instruments_Queried__c > 0){
