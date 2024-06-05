@@ -25,27 +25,18 @@ global class ServiceSchdulableERTUpdate implements Schedulable {
         }
         
         List<Case> casesToUpdateFields = new List<Case>();
-        //String TemplateName = System.label.SC_ERT_EmailTeplateName;
-        System.debug('TemplateId 0.1');
-        List<EmailTemplate> emailTemplateList = [SELECT Id,Body from EmailTemplate where name ='ERTResolutionTemplateText'];
-        //List<EmailTemplate> emailTemplateList = [SELECT Id,Body from EmailTemplate where name = :TemplateName];
-        //List<EmailTemplate> emailTemplateList = [SELECT Id,Body from EmailTemplate where Id = '00X8D000003Kel9UAC'];
-        System.debug('emailTemplateList 0.1' + emailTemplateList);
-        //String emailTemplateContent = [SELECT Body from EmailTemplate where Id = '00X8D000003Kel9UAC'].Body;
-        //String emailTemplateContent = [SELECT Body from EmailTemplate where name = :TemplateName].Body;
+        String emailTemplateContent = System.label.SC_ERT_EmailTeplateName;
+        
         // Loop through cases again to update fields based on condition
         for (Case c : casesToUpdate) {
             Messaging.SingleEmailMessage email = new Messaging.SingleEmailMessage();
-            email.setTemplateId(emailTemplateList.get(0).Id);
-            email.setTargetObjectId(c.Id);
-            email.setWhatId(c.Id);
-            email.setSaveAsActivity(false); // Check with True Also
-            //emailTemplateList = emailTemplateList.replace('{{Case_Owner_Name__c}}','c.Case_Owner_Name__c');
-            System.debug('emailTemplateList.get(0).Body' + emailTemplateList.get(0).Body);
-            String emailTemplateContentData = emailTemplateList.get(0).Body;
-            emailTemplateContentData = emailTemplateContentData.replace('{{Case_Owner_Name__c}}','c.Case_Owner_Name__c');
-            System.debug('emailTemplateContentData' + emailTemplateContentData);
-            email.setHtmlBody(emailTemplateContentData);
+            if (c.Case_Owner_Name__c != null){
+                emailTemplateContent = emailTemplateContent.replace('{{Case_Owner_Name__c}}', c.Case_Owner_Name__c);
+            }
+                email.setTargetObjectId(c.Id);
+                email.setWhatId(c.Id);
+                email.setSaveAsActivity(false); // Check with True Also
+                email.setHtmlBody(emailTemplateContent);
             
             // Check cause and diagnosis fields
             if(c.Cause__c =='Production - Not Part of LSEG Offering' && c.Diagnosis_Summary__c =='Content Not Available' &&
@@ -78,7 +69,7 @@ global class ServiceSchdulableERTUpdate implements Schedulable {
                 c.Data_Source_Name__c = 'EJV';
                 c.Data_Source_Country__c = 'Global';
                 c.Content_Type__c = 'Price Challenge/variance';
-                c.Resolution_Comment__c = email.getHtmlBody();
+                c.Resolution_Comment__c = emailTemplateContent;
             }
             casesToUpdateFields.add(c);
         }
