@@ -1,3 +1,4 @@
+// Check Estimation Resolution Time Less then 12 hour for CONT_ST_RPS queue
 global class ServiceSchdulableERTUpdate implements Schedulable {
 
     global void execute(SchedulableContext sc) {
@@ -21,60 +22,60 @@ global class ServiceSchdulableERTUpdate implements Schedulable {
         }
         // Update the estimate_resolution_time__c field for all cases meeting the criteria
         if (!casesToUpdate.isEmpty()) {
-            update casesToUpdate;
-        }
-        
-        List<Case> casesToUpdateFields = new List<Case>();
-        String emailTemplateContent = System.label.SC_ERT_EmailTeplateName;
+          
+        	List<Case> casesToUpdateFields = new List<Case>();
+        	String emailTemplateContent = System.label.SC_ERT_EmailTeplateName;
         
         // Loop through cases again to update fields based on condition
-        for (Case c : casesToUpdate) {
-            Messaging.SingleEmailMessage email = new Messaging.SingleEmailMessage();
-            if (c.Case_Owner_Name__c != null){
-                emailTemplateContent = emailTemplateContent.replace('{{Case_Owner_Name__c}}', c.Case_Owner_Name__c);
-            }
-                email.setTargetObjectId(c.Id);
-                email.setWhatId(c.Id);
-                email.setSaveAsActivity(false); // Check with True Also
-                email.setHtmlBody(emailTemplateContent);
+        	for (Case c : casesToUpdate) {
+           		 Messaging.SingleEmailMessage email = new Messaging.SingleEmailMessage();
+           		 if (c.Case_Owner_Name__c != null){
+              		  emailTemplateContent = emailTemplateContent.replace('{{Case_Owner_Name__c}}', c.Case_Owner_Name__c);
+          		  }
+                	  email.setTargetObjectId(c.Id);
+                      email.setWhatId(c.Id);
+                      email.setSaveAsActivity(false); // Check with True Also
+                      email.setHtmlBody(emailTemplateContent);
             
             // Check cause and diagnosis fields
-            if(c.Cause__c =='Production - Not Part of LSEG Offering' && c.Diagnosis_Summary__c =='Content Not Available' &&
-               c.Number_of_Instruments_Queried__c > 0){
-                c.Status = 'Service Restored';
-                c.Market_Sector__c = 'TR Pricing Services';
-                c.Market_sector_Sub_Type_1__c = 'FixedIncome';
-                c.Resolution_Code__c = 'New Data Added by LSEG to Existing Market';
-                c.Data_Field__c = 'Pricing Services';
-                c.Data_Source_Name__c = 'EJV';
-                c.Data_Source_Country__c = 'Global';
+             	if(c.Cause__c =='Production - Not Part of LSEG Offering' && c.Diagnosis_Summary__c =='Content Not Available' &&
+               		  c.Number_of_Instruments_Queried__c > 0){
+                      c.Status = 'Service Restored';
+                      c.Market_Sector__c = 'TR Pricing Services';
+                      c.Market_sector_Sub_Type_1__c = 'FixedIncome';
+                      c.Resolution_Code__c = 'New Data Added by LSEG to Existing Market';
+                      c.Data_Field__c = 'Pricing Services';
+                      c.Data_Source_Name__c = 'EJV';
+                      c.Data_Source_Country__c = 'Global';
                    
-            } else if (c.Cause__c =='Source - Lack of Information/Source' && c.Diagnosis_Summary__c =='Content Not Available' &&
-                        c.Number_of_Instruments_Queried__c > 0){
-                c.Status = 'Service Restored';
-                c.Market_Sector__c = 'TR Pricing Services';
-                c.Market_sector_Sub_Type_1__c = 'FixedIncome';
-                c.Resolution_Code__c = 'Data Not Added by LSEG';
-                c.Data_Field__c = 'Pricing Services';
-                c.Data_Source_Name__c = 'EJV';
-                c.Data_Source_Country__c = 'Global';
+            	} else if (c.Cause__c =='Source - Lack of Information/Source' && c.Diagnosis_Summary__c =='Content Not Available' &&
+                      c.Number_of_Instruments_Queried__c > 0){
+                      c.Status = 'Service Restored';
+                      c.Market_Sector__c = 'TR Pricing Services';
+                      c.Market_sector_Sub_Type_1__c = 'FixedIncome';
+                      c.Resolution_Code__c = 'Data Not Added by LSEG';
+                      c.Data_Field__c = 'Pricing Services';
+                      c.Data_Source_Name__c = 'EJV';
+                      c.Data_Source_Country__c = 'Global';
                             
-            } else if (c.Cause__c =='Content Explanation' && c.Diagnosis_Summary__c =='Content Explanation' && 
-                       c.Number_of_Instruments_Queried__c > 0){
-                c.Status = 'Service Restored';
-                c.Market_Sector__c = 'TR Pricing Services';
-                c.Market_sector_Sub_Type_1__c = 'FixedIncome';
-                c.Resolution_Code__c = 'Data confirmed as correct';
-                c.Data_Field__c = 'Pricing Services';
-                c.Data_Source_Name__c = 'EJV';
-                c.Data_Source_Country__c = 'Global';
-                c.Content_Type__c = 'Price Challenge/variance';
-                c.Resolution_Comment__c = emailTemplateContent;
-            }
+            	} else if (c.Cause__c =='Content Explanation' && c.Diagnosis_Summary__c =='Content Explanation' && 
+                      c.Number_of_Instruments_Queried__c > 0){
+                      c.Status = 'Service Restored';
+                      c.Market_Sector__c = 'TR Pricing Services';
+                      c.Market_sector_Sub_Type_1__c = 'FixedIncome';
+                      c.Resolution_Code__c = 'Data confirmed as correct';
+                      c.Data_Field__c = 'Pricing Services';
+                      c.Data_Source_Name__c = 'EJV';
+                      c.Data_Source_Country__c = 'Global';
+                      c.Content_Type__c = 'Price Challenge/variance';
+                      c.Resolution_Comment__c = emailTemplateContent;
+            	}
+                
             casesToUpdateFields.add(c);
-        }
-        if (!casesToUpdateFields.isEmpty()) {
-            update casesToUpdateFields;
-        }
-    }
+        		}
+        	if (!casesToUpdateFields.isEmpty()) {
+                update casesToUpdateFields;
+        	}
+    	}
+    }       
 }
