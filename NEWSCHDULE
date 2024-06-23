@@ -1,73 +1,38 @@
-global class ServiceBatchERTUpdate implements Database.Batchable<sObject>, Schedulable {
-    global Database.QueryLocator start(Database.BatchableContext bc) {
-        DateTime currentDateTime = DateTime.now().addHours(12);
-        return Database.getQueryLocator([
-            SELECT Id, Likely_Restoration_Time__c, Cause__c, Diagnosis_Summary__c, Number_of_Instruments_Queried__c, Case_Owner_Name__c
-            FROM Case
-            WHERE Likely_Restoration_Time__c < :currentDateTime AND
-                  Case_Owner_Role_Static__c ='CONT_ST_RPS' AND
-                  Status NOT IN ('Closed','Cancelled','Unresolved','Service Restored')
-        ]);
-    }
+@isTest
+private class TestServiceBatchERTUpdate {
 
-    global void execute(Database.BatchableContext bc, List<Case> scope) {
-        List<Case> casesToUpdate = new List<Case>();
-        String emailTemplateContent = System.label.SC_ERT_EmailTeplateName;
-        
-        for (Case c : scope) {
-            c.Likely_Restoration_Time__c = c.Likely_Restoration_Time__c.addDays(7);
-            
-            Messaging.SingleEmailMessage email = new Messaging.SingleEmailMessage();
-            if (c.Case_Owner_Name__c != null){
-                emailTemplateContent = emailTemplateContent.replace('{{Case_Owner_Name__c}}', c.Case_Owner_Name__c);
-            }
-            email.setTargetObjectId(c.Id);
-            email.setWhatId(c.Id);
-            email.setSaveAsActivity(false);
-            email.setHtmlBody(emailTemplateContent);
-            
-            if(c.Cause__c =='Production - Not Part of LSEG Offering' && c.Diagnosis_Summary__c =='Content Not Available' &&
-               c.Number_of_Instruments_Queried__c > 0){
-                c.Status = 'Service Restored';
-                c.Market_Sector__c = 'TR Pricing Services';
-                c.Market_sector_Sub_Type_1__c = 'FixedIncome';
-                c.Resolution_Code__c = 'New Data Added by LSEG to Existing Market';
-                c.Data_Field__c = 'Pricing Services';
-                c.Data_Source_Name__c = 'EJV';
-                c.Data_Source_Country__c = 'Global';
-            } else if (c.Cause__c =='Source - Lack of Information/Source' && c.Diagnosis_Summary__c =='Content Not Available' &&
-                       c.Number_of_Instruments_Queried__c > 0){
-                c.Status = 'Service Restored';
-                c.Market_Sector__c = 'TR Pricing Services';
-                c.Market_sector_Sub_Type_1__c = 'FixedIncome';
-                c.Resolution_Code__c = 'Data Not Added by LSEG';
-                c.Data_Field__c = 'Pricing Services';
-                c.Data_Source_Name__c = 'EJV';
-                c.Data_Source_Country__c = 'Global';
-            } else if (c.Cause__c =='Content Explanation' && c.Diagnosis_Summary__c =='Content Explanation' && 
-                       c.Number_of_Instruments_Queried__c > 0){
-                c.Status = 'Service Restored';
-                c.Market_Sector__c = 'TR Pricing Services';
-                c.Market_sector_Sub_Type_1__c = 'FixedIncome';
-                c.Resolution_Code__c = 'Data confirmed as correct';
-                c.Data_Field__c = 'Pricing Services';
-                c.Data_Source_Name__c = 'EJV';
-                c.Data_Source_Country__c = 'Global';
-                c.Content_Type__c = 'Price Challenge/variance';
-                c.Resolution_Comment__c = emailTemplateContent;
-            }
-            casesToUpdate.add(c);
+    static testMethod void testBatchExecution() {
+        // Create test data
+        List<Case> testCases = new List<Case>();
+        for (Integer i = 0; i < 10; i++) {
+            Case c = new Case(
+                Likely_Restoration_Time__c = DateTime.now().addDays(-1), // Ensure Likely_Restoration_Time__c is in the past
+                Cause__c = 'Test Cause ' + i,
+                Diagnosis_Summary__c = 'Test Diagnosis ' + i,
+                Number_of_Instruments_Queried__c = 1,
+                Case_Owner_Name__c = 'Test Owner ' + i
+            );
+            testCases.add(c);
         }
-        
-        if (!casesToUpdate.isEmpty()) {
-            update casesToUpdate;
-        }
-    }
+        insert testCases;
 
-    global void finish(Database.BatchableContext bc) {}
+        Test.startTest();
 
-    global void execute(SchedulableContext sc) {
+        // Schedule the batch job
         ServiceBatchERTUpdate batchJob = new ServiceBatchERTUpdate();
-        Database.executeBatch(batchJob, 100);
+        String cronExp = '0 0 0 * * ?'; // Run daily at midnight
+        String jobId = system.schedule('Test Service Batch ERT Update', cronExp, batchJob);
+
+        Test.stopTest();
+
+        // Verify results
+        List<Case> updatedCases = [SELECT Id, Likely_Restoration_Time__c FROM Case WHERE Id IN :testCases];
+        System.assert(!updatedCases.isEmpty(), 'Expected some cases to be updated');
+
+        for (Case c : updatedCases) {
+            // Verify that Likely_Restoration_Time__c is updated correctly
+            System.assertEquals(DateTime.now().addDays(6).date(), c.Likely_Restoration_Time__c.date(),
+                                'Likely Restoration Time not updated correctly');
+        }
     }
 }
