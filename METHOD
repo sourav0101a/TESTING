@@ -7,7 +7,7 @@
         
         return oppTeamMember;
 
-
+Test failure, method: OpportunityTriggerGenericHelperTest.performLegalEntityTest -- System.DmlException: Insert failed. First exception on row 0; first error: FIELD_INTEGRITY_EXCEPTION, field integrity exception: PricebookEntryId (pricebook entry currency code does not match opportunity currency code): [PricebookEntryId] stack Class.OpportunityTriggerGenericHelperTest.testData: line 462, column 1
 
 
 
