@@ -1,85 +1,3 @@
-   public static List<OpportunityTeamMember> getTeamMembers(Set<Id> oppIdSet){
-        List<OpportunityTeamMember> oppTeamMember = new List<OpportunityTeamMember>();
-        
-        oppTeamMember = [SELECT id,Opportunityid,TeamMemberRole,OpportunityAccessLevel,Userid 
-                         FROM OpportunityTeamMember 
-                         WHERE Opportunityid IN: oppIdSet];
-        
-        return oppTeamMember;
-
-Test failure, method: OpportunityTriggerGenericHelperTest.performLegalEntityTest -- System.DmlException: Insert failed. First exception on row 0; first error: FIELD_INTEGRITY_EXCEPTION, field integrity exception: PricebookEntryId (pricebook entry currency code does not match opportunity currency code): [PricebookEntryId] stack Class.OpportunityTriggerGenericHelperTest.testData: line 462, column 1
-
-
-
-
-@isTest
-private class OppQuoteLineItemsSyncTest {
-    @isTest
-    static void testOppQuoteLineItemsSync() {
-        // Create test data
-        Opportunity opp = new Opportunity(Name = 'Test Opp', StageName = 'Prospecting', CloseDate = Date.today());
-        insert opp;
-
-        Pricebook2 standardPricebook = [SELECT Id FROM Pricebook2 WHERE IsStandard = true LIMIT 1];
-
-        PricebookEntry pbe = new PricebookEntry(
-            Pricebook2Id = standardPricebook.Id,
-            Product2Id = Test.getStandardPricebookEntry().Product2Id,
-            UnitPrice = 100.00,
-            IsActive = true
-        );
-        insert pbe;
-
-        Quote quote = new Quote(
-            Name = 'Test Quote',
-            OpportunityId = opp.Id,
-            Pricebook2Id = standardPricebook.Id,
-            Status = 'Draft'
-        );
-        insert quote;
-
-        QuoteLineItem qli = new QuoteLineItem(
-            QuoteId = quote.Id,
-            PricebookEntryId = pbe.Id,
-            UnitPrice = 100.00,
-            Quantity = 1,
-            Discount = 0,
-            SortOrder = 1
-        );
-        insert qli;
-
-        OpportunityLineItem oli = new OpportunityLineItem(
-            OpportunityId = opp.Id,
-            PricebookEntryId = pbe.Id,
-            UnitPrice = 100.00,
-            Quantity = 1,
-            Discount = 0,
-            SortOrder = 1
-        );
-        insert oli;
-
-        Map<Id, Id> syncQuoteMap = new Map<Id, Id>();
-        syncQuoteMap.put(quote.Id, opp.Id);
-
-        // Call the method to be tested
-        Test.startTest();
-        OppQuoteLineItemsSync(syncQuoteMap);
-        Test.stopTest();
-
-        // Retrieve the updated Opportunity Line Item
-        OpportunityLineItem updatedOli = [SELECT Id FROM OpportunityLineItem WHERE Id = :oli.Id];
-
-        // Assert that the Opportunity Line Item was updated as expected
-        System.assertEquals(qli.PricebookEntryId, updatedOli.PricebookEntryId);
-        System.assertEquals(qli.UnitPrice, updatedOli.UnitPrice);
-        System.assertEquals(qli.Quantity, updatedOli.Quantity);
-        System.assertEquals(qli.Discount, updatedOli.Discount);
-        System.assertEquals(qli.SortOrder, updatedOli.SortOrder);
-    }
-}
-
-
-
 Deployment 'a0MSq000000XPpFMAW': Changes detected in target branch 'TrustUAT' after creation of the promotion branch 'promotion/P104531-DeployP104531TrustUAT1', auto merge successfully performed to incorporate the last changes to the deployment.[OpportunityTriggerGenericHelperTest.cls] key replaced with value 4 time(s)[OpportunityTriggerGenericHelperTest.cls] key replaced with value 4 time(s)[OpportunityTriggerGenericHelperTest.cls] key replaced with value 4 time(s)[OpportunityTriggerGenericHelperTest.cls] key replaced with value 4 time(s)Test failure, method: OpportunityTriggerGenericHelperTest.genericAfterInsert -- System.DmlException: Update failed. First exception on row 0 with id 0067600000A9FIEAA3; first error: FIELD_CUSTOM_VALIDATION_EXCEPTION, FINRA Registered User required on REDI opportunity.Please add FINRA Registered User to the opportunity sales team before moving the Sales Stage to 3 and above.: [] stack Class.OpportunityTriggerGenericHelperTest.genericAfterInsert: line 904, column 1Test failure, method: OpportunityTriggerGenericHelperTest.genericAfterUpdate -- System.LimitException: Too many SOQL queries: 101 stack Class.Opportunity_RM_Handler.Update_RM_Flag: line 111, column 1
 Class.OpportunityTriggerGenericHelper.genericAfterInsert: line 1025, column 1
 Class.MasterOpportunityTriggerHandler.AfterInsert: line 74, column 1
@@ -219,3 +137,479 @@ static testmethod void genericAfterInsert(){
         Test.stopTest();
     }
 
+static void testData(){
+        List<Opportunity_Validations__mdt> Opportunityvalidatnmdt=OpportunityTriggerUtility.opportunityvalidationmtd();
+        Integration_Setting__c integrationSetting = new Integration_Setting__c();
+        integrationSetting.name = 'AccountConnect';
+        integrationSetting.API_Key__c = 'x-api-key';
+        integrationSetting.Endpoint_Server__c = 'https://dev.rasi.refinitiv.com';
+        integrationSetting.Endpoint_URI__c = 'api/v1/accounts/account-request';
+        integrationSetting.HTTP_Headers__c = 'Content-Type=>application/json';
+        integrationSetting.HTTP_Method__c = 'POST';
+        integrationSetting.Timeout__c = 120000;
+        integrationSetting.Enable_Logging__c = true;
+        
+        insert integrationSetting;
+        Opportunity_Validations__mdt metdat=new Opportunity_Validations__mdt();
+        metdat.Field_API__c='New Account';
+        metdat.Field_Value__c='abc';
+        system.assert(integrationSetting.Id != null);
+        
+      //Creating Integration Setting
+        Integration_Setting__c cipsAccessSetting= new Integration_Setting__c();
+        cipsAccessSetting.name= 'CIPSCASIOpportunityAccessToken';
+        cipsAccessSetting.Endpoint_Server__c ='https://rasi-nonprod.auth.us-east-1.amazoncognito.com-nonprod.auth.us-east-1.amazoncognito.com-prod.auth.us-east-1.amazoncognito.com-prod.auth.us-east-1.amazoncognito.com-nonprod.auth.us-east-1.amazoncognito.com-prod.auth.us-east-1.amazoncognito.com';
+        cipsAccessSetting.Endpoint_URI__c='oauth2/token';
+        cipsAccessSetting.HTTP_Headers__c='Content-Type=>application/x-www-form-urlencoded';
+        cipsAccessSetting.HTTP_Method__c ='POST';
+        cipsAccessSetting.Timeout__c=120000;
+
+        insert cipsAccessSetting;
+        
+        Integration_Setting__c integrationCASISetting= new Integration_Setting__c(); 
+        integrationCASISetting.name= 'CIPSCASIOpportunityConnectCPQ';
+        integrationCASISetting.API_Key__c= 'x-api-key';
+        integrationCASISetting.Endpoint_Server__c ='https://dev.rasi.refinitiv.com';
+        integrationCASISetting.Endpoint_URI__c='oauth/v1/opportunities/opportunity/';
+        integrationCASISetting.HTTP_Headers__c='Content-Type=>application/json';
+        integrationCASISetting.HTTP_Method__c ='POST'; 
+        integrationCASISetting.Timeout__c=120000;      
+        integrationCASISetting.Enable_Logging__c=true;
+        insert integrationCASISetting;
+        
+        
+        /* Integration_Setting__c cipsSetting= new Integration_Setting__c();
+cipsSetting.name= 'CIPSRASIOpportunityConnect';
+cipsSetting.Endpoint_Server__c ='https://rasi-nonprod.auth.us-east-1.amazoncognito.com-nonprod.auth.us-east-1.amazoncognito.com-prod.auth.us-east-1.amazoncognito.com-prod.auth.us-east-1.amazoncognito.com-nonprod.auth.us-east-1.amazoncognito.com-prod.auth.us-east-1.amazoncognito.com.refinitiv.com';
+cipsSetting.Endpoint_URI__c='/api/v2/Opportunity/OpportunityDetails';
+cipsSetting.HTTP_Headers__c='Type=>application/json;authorization=>Basic;x-api-key=>x9GQfqGTE295yNLTfKw6M6KVT076sAHbdOhsncge';
+cipsSetting.HTTP_Method__c ='POST';
+cipsSetting.Timeout__c=120000;
+
+insert cipsSetting;
+
+system.assert(cipsSetting.Id != null);
+*/
+      
+        insert new TRUST_Constants__c(SetupOwnerId=UserInfo.getOrganizationId(), Opty_Revenue_type_name__c='Usage Revenue,Once-Off,Outright Revenue');
+        List<Opportunity_Validations__mdt> objList= new List<Opportunity_Validations__mdt>();
+        objList= [Select Field_API__c,Field_Value__c, DeveloperName from Opportunity_Validations__mdt];
+        
+        List<User> testUserList = new List<User>();
+        List<Opportunity> testOpportunityList = new List<Opportunity>();
+        List<Account> testAccountList = new List<Account>();
+        List<Direct_Pool__c>dpList = new List<Direct_Pool__c>();
+        List<PriceBook2> priceBookList = new List<PriceBook2>();
+        List<Product2> productList = new List<Product2>(); 
+        List<PricebookEntry> PricebookEntryList = new List<PricebookEntry>();
+        List<opportunityLineItem> oppLineItemList = new List<opportunityLineItem>();
+        
+        //reffering 
+        MasterCustomSetting_Test.customSettings();
+        //creating users
+        
+        
+        TriggerStatus__c TriStatus= new TriggerStatus__c(); // inserting customsetting
+        TriStatus.name='Primary';
+        TriStatus.Status__c='OFF';
+        TriStatus.UsersExclude__c='00530000000xQ4q';
+        insert TriStatus;
+        
+        //Integration User                         
+        id ProfId =  optimisationTestUtility.getProfileId().get('Integration');                      
+        User tfUser = optimisationTestUtility.getUserDetails(ProfId,'tfintegration@thomsonreuters.com','tfintegration@thomsonreuters.com','Integration');
+        tfUser.Company_Allocation__c='TCS';
+        testUserList.add(tfUser);
+        
+        Id ProfileIdAPI = optimisationTestUtility.getProfileId().get('API');
+        User GenericUser = optimisationTestUtility.getUserDetails(ProfileIdAPI,'api@thomsonreuters.com','api@thomsonreuters.com','API');
+        GenericUser.Company_Allocation__c='TCS';
+        testUserList.add(GenericUser);
+        
+        //insert all users
+        insert testUserList;
+        
+        //Creating Campaign record
+        List<Campaign> campaginList = new List<Campaign>();
+        
+        Campaign campaignRecord = optimisationTestUtility.getCampaignDetails('TestCampaign','In Progress');
+        campaignRecord.Unica_ID__c ='00011090871';
+        campaginList.add(campaignRecord);
+        
+        Campaign cmpgn1 = optimisationTestUtility.getCampaignDetails('TEST1',null);
+        cmpgn1.tocSiebelId__c='TEST';
+        cmpgn1.Unica_ID__c='45374';
+        
+        campaginList.add(cmpgn1);
+        
+        //insert all campagins
+        insert campaginList;
+        
+        List<Static_Values__c> sList =new List<Static_Values__c>();
+        Static_Values__c s1 = new Static_Values__c();
+        s1.Name='Account.Prospect';
+        s1.Value__c='012300000000erOAAQ';
+        Static_Values__c s2 = new Static_Values__c();
+        s2.Name='Account.Customer';
+        s2.Value__c='012400000004xe3AAA';
+        sList.add(s1);
+        sList.add(s2);
+        
+        Static_Values__c oppReason5= new Static_Values__c();
+        oppReason5.Name='ST4OR5_Prob_WithCommit';
+        oppReason5.Value__c='90';
+        sList.add(oppReason5);
+        
+        Static_Values__c oppReason6= new Static_Values__c();
+        oppReason6.Name='ST5_Prob_WithoutCommit';
+        oppReason6.Value__c='80';
+        sList.add(oppReason6);
+        
+        Static_Values__c oppReason7= new Static_Values__c();
+        oppReason7.Name='ST4_Prob_WithoutCommit';
+        oppReason7.Value__c='50';
+        sList.add(oppReason7);
+        upsert sList;
+        
+        Test.startTest();
+        //Creating Accounts
+        
+        Account oppAccount = optimisationTestUtility.getAccountdetails('Account123@',TRUE,'prospect');    
+        oppAccount.tfCrmCountry__c='United';
+        oppAccount.CurrencyIsoCode = 'AMD';
+        oppAccount.Segment__c='Academia'; 
+        oppAccount.AccountNumber = 'A-123458';
+        oppAccount.Coverage_Model__c = 'Growth';
+        oppAccount.Partner__c=true;
+        oppAccount.Partner_Role__c='Cosell';
+        oppAccount.Addressable__c=True;
+        testAccountList.add(oppAccount);
+        
+        Account oppAcc = optimisationTestUtility.getAccountWithParentId('Acc23@',FALSE,'prospect',oppAccount.id);  
+        oppAcc.tfCrmCountry__c='United';
+        oppAcc.Partner__c = True;
+        oppAcc.Partner_Role__c='Cosell';
+        oppAcc.CurrencyIsoCode = 'USD';
+        oppAcc.AccountNumber = 'A-123457';
+        oppAcc.Coverage_Model__c = 'Growth';
+        oppAcc.Segment__c='Academia';
+        oppAcc.Ultimate_Parent_Account__c=oppAccount.Id;
+        testAccountList.add(oppAcc);
+        
+        Account oppParentAccount = optimisationTestUtility.getAccountdetails('parentAccount@12',TRUE,'prospect');
+        oppParentAccount.tfCrmCountry__c='United';
+        oppParentAccount.Segment__c='Academia';
+        oppParentAccount.AccountNumber = 'A-123456';
+        testAccountList.add(oppParentAccount);
+        //insert all accounts
+        insert testAccountList; 
+        
+        
+        //Creating Pricebook entries
+        PriceBook2 PricebookGenesis =optimisationTestUtility.getPricebook('Genesis Pricebook',false);
+        priceBookList.add(PricebookGenesis);
+        PriceBook2 fxallPricebookRec =optimisationTestUtility.getPricebook('FXall Pricebook',true);
+        priceBookList.add(fxallPricebookRec);
+        PriceBook2 grcPricebook =optimisationTestUtility.getPricebook('GRC Pricebook',true);
+        priceBookList.add(grcPricebook);
+        //insert all pricebook
+        insert priceBookList;
+        
+        //creating products
+        Product2 OppProduct = optimisationTestUtility.getProductDetails('Test Product','Webcast Option');
+        OppProduct.Description='Test';
+        OppProduct.productCode = 'test';
+        productList.add(OppProduct);
+        //inserting product list
+        insert productList;
+        
+        //Insert Custom Account Team members
+        Custom_Account_Team__c customTM =  optimisationTestUtility.getCustomAccountTeamDetails(oppAccount.Id,'FI Client Specialist','Lead Client Specialist');      
+        insert customTM ;
+        Partner_Accounts__c PAC=new Partner_Accounts__c();
+        PAC.Name='testABC';
+        PAC.AccountID__c=oppAccount.Id;
+        insert PAC;
+        opportunity opptest = optimisationTestUtility.getOpportunityDetails('testingOpp', oppAccount.Id,'account',PricebookGenesis.Id);
+        opptest.Legal_Review_Status__c='Submitted to Legal';
+        opptest.StageName=Label.Opportunity_Stage_5;
+        opptest.CurrencyIsoCode='USD';
+        opptest.Onboarding__c='First Trade';
+        opptest.Suppress_Order_Form__c = TRUE;
+        opptest.tfcrmWinLossReason__c ='Reduction in Client Staff';
+        opptest.GRC_Opportunity__c = FALSE;
+        opptest.tfcrmWinLossCommentary__c='lost';
+        opptest.CampaignId = campaignRecord.Id;
+        opptest.Trial_Opportunity__c = TRUE;
+        opptest.tfcrmMkt__c='Corporate United States';
+        opptest.tocPurchaseOrderNumber__c='12345';
+        opptest.Is_PO_Required__c='No PO# Required';        
+        // opptest.Partner_Account__c = oppacc.Id;
+        opptest.Partner_Role__c = 'test23';
+        opptest.Unica_ID__c = '789652';
+        oppTest.Competitors__c='Test';
+        oppTest.Commit_to_Forecast__c=true;
+        oppTest.tocGSCSMonthlyRecurring__c = 900;
+        oppTest.tocGSCSOneTimeRevenue__c = 900;
+        
+        
+        Opportunity OppLegalTest =optimisationTestUtility.getOpportunityDetails('oppegal', oppAccount.Id ,'test',Test.getStandardPricebookId()); 
+        OppLegalTest.StageName=Label.Opportunity_Stage_4;
+        OppLegalTest.CurrencyIsoCode='USD';
+        OppLegalTest.GRC_Opportunity__c = FALSE;
+        OppLegalTest.Commit_to_Forecast__c=false;
+        
+        opportunity trailOpportunity = optimisationTestUtility.getOpportunityDetails('genera@l234', oppAccount.Id,'account',PricebookGenesis.Id);
+        trailOpportunity.Legal_Review_Status__c='Submitted to Legal';
+        trailOpportunity.StageName='1.analysis';
+        trailOpportunity.Partner_Name__c=PAC.Id;
+        trailOpportunity.CurrencyIsoCode='USD';
+        trailOpportunity.Onboarding__c='First Trade';
+        trailOpportunity.Suppress_Order_Form__c = TRUE;
+        trailOpportunity.tfcrmWinLossReason__c ='Reduction in Client Staff';
+        trailOpportunity.GRC_Opportunity__c = false;
+        trailOpportunity.CampaignId = campaignRecord.Id;
+        trailOpportunity.Trial_Opportunity__c = TRUE;
+        trailOpportunity.Associated_Id__c = opptest.Id;
+        trailOpportunity.Multi_Campaigns__c='test';
+        trailOpportunity.Lead_Source_Most_Recent__c = 'CLIENT SPECIALIST';
+        trailOpportunity.Secondary_Lead_Source_Most_Recent__c='test trail';
+        
+        
+        opportunity OppGensisOld =  optimisationTestUtility.getOpportunityDetails('oppGeneis', oppAccount.Id,'account',PricebookGenesis.Id);
+        OppGensisOld.Legal_Review_Status__c='Submitted to Legal';
+        OppGensisOld.StageName=Label.Opportunity_Stage_8;
+        OppGensisOld.CurrencyIsoCode='USD';
+        OppGensisOld.Onboarding__c='First Trade';
+        OppGensisOld.Suppress_Order_Form__c = FALSE;
+        OppGensisOld.tfcrmWinLossReason__c ='Reduction in Client Staff';
+        OppGensisOld.Competitors__c='Test';
+        OppGensisOld.tfcrmWinLossCommentary__c = 'Test Class';
+        OppGensisOld.Unica_ID__c='12345';
+        
+        Opportunity oppTesting = optimisationTestUtility.getOpportunityDetails('oppTesting', oppAccount.Id,'account',null);
+        oppTesting.Legal_Review_Status__c='Submitted to Legal';
+        oppTesting.StageName='1.analysis';
+        oppTesting.CurrencyIsoCode='USD';
+        oppTesting.Onboarding__c='First';
+        oppTesting.Suppress_Order_Form__c = TRUE;
+        oppTesting.tfcrmWinLossReason__c ='Reduction in Client Staff';
+        oppTesting.Trial_Opportunity__c = TRUE;
+        oppTesting.GRC_Opportunity__c = TRUE ; 
+        oppTesting.Partner_Role__c='test';
+        oppTesting.Partner_Account__c=oppAccount.Id;
+        
+        opportunity oppQuoteExpired =  optimisationTestUtility.getOpportunityDetails('oppQuoteExpired', oppAccount.Id,'account',PricebookGenesis.Id);
+        oppQuoteExpired.Legal_Review_Status__c='Submitted to Legal';
+        //oppQuoteExpired.name= 'Conv20';
+        //oppQuoteExpired.Associated_Opportunity__c = oppTesting.Id;
+        oppQuoteExpired.StageName='1.analysis';
+        oppQuoteExpired.CurrencyIsoCode='USD';
+        oppQuoteExpired.Onboarding__c='First Trade';
+        oppQuoteExpired.Suppress_Order_Form__c = TRUE;
+        oppQuoteExpired.tfcrmWinLossReason__c ='Reduction in Client Staff';
+        
+        Opportunity genesisOpp =  optimisationTestUtility.getOpportunityDetails('genesisOpp', oppAccount.Id,'account',PricebookGenesis.Id);
+        genesisOpp.Legal_Review_Status__c='Submitted to Legal';
+        genesisOpp.StageName=Label.Opportunity_Stage_8;
+        genesisOpp.CurrencyIsoCode='USD';
+        genesisOpp.Onboarding__c='First Trade';
+        genesisOpp.Suppress_Order_Form__c = FALSE;
+        genesisOpp.tfcrmWinLossReason__c ='Reduction in Client Staff';
+        genesisOpp.Competitors__c='Test';
+        genesisOpp.Associated_Id__c = oppTesting.Id;
+        genesisOpp.tfcrmWinLossCommentary__c = 'Test Class';
+        genesisOpp.tfcrmMkt__c = 'United States';
+        genesisOpp.Unica_ID__c='12345000';
+        
+        Opportunity parentOpportunity =  optimisationTestUtility.getOpportunityDetails('parentOpportunity', oppAccount.Id,'account',PricebookGenesis.Id);
+        parentOpportunity.Legal_Review_Status__c='Submitted to Legal';
+        parentOpportunity.StageName=Label.Opportunity_Stage_8;
+        parentOpportunity.CurrencyIsoCode='USD';
+        parentOpportunity.Onboarding__c='First Trade';
+        parentOpportunity.Suppress_Order_Form__c = FALSE;
+        parentOpportunity.tfcrmWinLossReason__c ='Reduction in Client Staff';
+        parentOpportunity.Competitors__c='Test';
+        parentOpportunity.tfcrmWinLossCommentary__c = 'Test Class';
+        parentOpportunity.Unica_ID__c='123577';
+        
+        // Adding code for BULK TOOL Oppty
+        opportunity bulkOpp= optimisationTestUtility.getOpportunityDetails('Bulk Opp', oppAccount.Id,'account',PricebookGenesis.Id);
+        bulkOpp.Legal_Review_Status__c='Submitted to Legal';
+        bulkOpp.StageName=Label.Opportunity_Stage_5;
+        bulkOpp.CurrencyIsoCode='USD';
+        bulkOpp.tfcrmWinLossReason__c ='Reduction in Client Staff';
+        bulkOpp.tfcrmWinLossCommentary__c='lost';
+        bulkOpp.CampaignId = campaignRecord.Id;
+        bulkOpp.tfcrmMkt__c='Reuters';
+        bulkOpp.Competitors__c='Test';
+        bulkOpp.BulkTool_CheckBox__c= true;
+        bulkOpp.Access_Statement_Order_Number__c= 'GBT-0001';
+        // ENDED bulk tool Oppty creation
+        
+        testOpportunityList.add(opptest);
+        testOpportunityList.add(OppLegalTest);
+        testOpportunityList.add(trailOpportunity);
+        testOpportunityList.add(oppQuoteExpired);
+        testOpportunityList.add(OppGensisOld);
+        testOpportunityList.add(oppTesting);
+        testOpportunityList.add(genesisOpp);
+        testOpportunityList.add(parentOpportunity);
+        testOpportunityList.add(bulkOpp);
+        
+        trConstants__c trc = new trConstants__c();
+        trc.Name='ModelId';
+        Id campaignInfluenceModelId = [SELECT Id FROM CampaignInfluenceModel  WHERE DeveloperName = 'Custom_Attribution_Model'].Id;
+        trc.Value__c= campaignInfluenceModelId ;
+        insert trc;
+        //insert all generic opportunities
+        //test code
+        opportunity opptest1 = optimisationTestUtility.getOpportunityDetails('exp', oppAccount.Id,'account',PricebookGenesis.id);
+        opptest1.StageName='6.dhhjdjk';
+        opptest1.tfcrmWinLossReason__c = 'rrr';
+        opptest1.tfcrmWinLossCommentary__c = 'yyu';
+        opptest1.Competitors__c = 'tty';
+        opptest1.CampaignId = campaginList[0].id;
+        //insert opptest1;
+        testOpportunityList.add(opptest1);
+        insert testOpportunityList;        
+      //  List<sobject> ltobj= new list<sobject>();      
+        Contact testContact = new Contact(FirstName = 'CQS Test', LastName = 'Contact', Salutation = 'M', tocContactStatus__c = 'Prospect', Phone = '+44 207 1234567',email='abc@gmail.com' );       
+        testContact.AccountId = oppAccount.Id;
+        TriggerUtility.objectNames.add('Contact');
+        insert testContact;
+   //   ltobj.add(testContact);
+        Contact_Proposition__c cp= new Contact_Proposition__c(Name='test',Related_Contact__c=testContact.id,Contact_Qualification_Status__c='Open');
+      // TriggerUtility.objectNames.add('Contact_Proposition__c');
+       insert cp;
+
+        Contact_Proposition_Influence__c cpi = new Contact_Proposition_Influence__c(Name='tt',Account__c=oppAccount.Id,ttr_Opp__c=opptest.id,Contact_Proposition__c=cp.id);
+        TriggerUtility.objectNames.add('Opportunity');
+        insert cpi;
+
+        //Create ContentVersion Record
+        string before = 'Testing base 64 encode';            
+        Blob beforeblob = Blob.valueOf(before);
+        ContentVersion cv = new ContentVersion();
+        cv.title = 'test content trigger';      
+        cv.PathOnClient = 'test';           
+        cv.VersionData = beforeblob;       
+        insert cv;         
+        
+        ContentVersion testContent = [SELECT id, ContentDocumentId FROM ContentVersion where Id =: cv.Id];
+        
+        List<Contentdocumentlink> cdlList = new List<Contentdocumentlink>();
+        
+        Contentdocumentlink cdl = new Contentdocumentlink();
+        cdl.ContentDocumentId=testContent.contentdocumentid;
+        cdl.LinkedEntityId= oppQuoteExpired.id;
+        insert cdl;
+        
+        //--test code
+        SAP_Account_Plan__c accPlan = optimisationTestUtility.getSAPAccountPlan('plan','USD', oppAcc.Id);
+        insert accPlan;
+        
+        SAP_Strategy__c strategyRecord = optimisationTestUtility.getSAPStrategy('stat', oppAcc.Id,accPlan.Id,'Strategy Valid','defend',system.today());
+        insert strategyRecord;
+        
+        SAP_Strategic_Opportunity__c sapStrategicRecord = optimisationTestUtility.getSapStrategicOpp(strategyRecord.id, OppLegalTest.id);
+        insert sapStrategicRecord;
+        
+        //Product creation
+        Product2 prod1 =optimisationTestUtility.getProductDetails('Eikon','Base');
+        insert prod1;
+        
+        List<PriceBookEntry> lstPBE = new List<PriceBookEntry>();
+        //Create pricebook entry
+        PriceBookEntry pbe1 = optimisationTestUtility.getPricebookEntryDetails(prod1.id, Test.getStandardPricebookId());
+        lstPBE.add(pbe1);
+        
+        PriceBookEntry pbe2 =optimisationTestUtility.getPricebookEntryDetails(prod1.id, grcPricebook.id);
+        lstPBE.add(pbe2);
+        
+        PriceBookEntry pbe3 = optimisationTestUtility.getPricebookEntryDetails(prod1.id,PricebookGenesis.id);
+        lstPBE.add(pbe3);
+        
+        insert lstPBE;
+        
+        
+        
+        //Campaign_Opportunity_Link__c
+        List<CampaignInfluence> camOppLinkList = new List<CampaignInfluence>();
+        
+        CampaignInfluence CMNew =optimisationTestUtility.getCampaignOppLink(cmpgn1.id,parentOpportunity.id);
+        camOppLinkList.add(CMNew);
+        
+        insert camOppLinkList;
+        
+        //creating opprtunity line item   
+        OpportunityLineItem oppLineItem =optimisationTestUtility.getOpportunityLineItemDetails(oppTesting.Id,pbe2.Id,-2,10);  
+        oppLineItem.QLI_Bill_Start_Date__c= system.today();
+        oppLineItem.QLI_Recurring_Total__c =10;
+        oppLineItem.tocOneTimeUnitPrice__c = 10;
+        //oppLineItem.TotalPrice = 20;
+        oppLineItem.GSSO__c='test';
+        oppLineItemList.add(oppLineItem);
+        
+        //creating opprtunity line item 
+        OpportunityLineItem oppGenesisLineItem =optimisationTestUtility.getOpportunityLineItemDetails(genesisOpp.Id,pbe3.Id,2,10);  
+        oppGenesisLineItem.QLI_Bill_Start_Date__c= system.today();
+        oppGenesisLineItem.QLI_Recurring_Total__c =10;
+        oppGenesisLineItem.tocOneTimeUnitPrice__c = 10;
+        oppGenesisLineItem.GSSO__c='test';
+        oppLineItemList.add(oppGenesisLineItem);
+        
+        //creating opprtunity line item 
+        OpportunityLineItem opp1 =optimisationTestUtility.getOpportunityLineItemDetails(opptest1.Id,pbe3.Id,2,10);  
+        opp1.QLI_Bill_Start_Date__c= system.today();
+        opp1.QLI_Recurring_Total__c =1;
+        opp1.tocOneTimeUnitPrice__c = 10;
+        opp1.GSSO__c='test';
+        oppLineItemList.add(opp1);
+        TriggerUtility.objectNames.add('OpportunityLineItem');
+        insert oppLineItemList;
+        
+        //Start----Quote creation logic
+        
+        
+        List<Quote> quoteList = new List<Quote>();
+        
+        ID grcQuoteRecordTypeId = optimisationTestUtility.getquoterecordtype().get('GRC Quote');
+        Static_Values__c statval=new Static_Values__c();
+        statval.Name='CTI_Scheduler_IsRunning';
+        statval.Value__c='false';
+        insert statval;
+        
+        Quote quoteRecord1 = optimisationTestUtility.getQuoteDetails('GRCQuoteTest',oppTesting.Id ,grcQuoteRecordTypeId,grcPricebook.Id,'In Progress');
+        quoteRecord1.Credit_Reason_Code__c ='Annual Price increase reversal';
+        quoteRecord1.Billing_Contact_Salutation__c = 'mr';
+        quoteList.add(quoteRecord1);
+        
+        Quote quoteRecord2 = optimisationTestUtility.getQuoteDetails('GRCQuoteTest2',oppTesting.Id ,grcQuoteRecordTypeId,grcPricebook.Id,'In Progress');
+        quoteRecord2.Credit_Reason_Code__c ='Annual Price increase reversal';
+        quoteRecord2.Billing_Contact_Salutation__c = 'mr';
+        quoteList.add(quoteRecord2);
+        
+        TriggerUtility.objectNames.add('Quote');
+        insert quoteList;
+        
+        QuoteLineItem qLI  = optimisationTestUtility.getQuoteLineItemDetails(quoteRecord2.id , pbe2.Id, -2222 , 1315);
+        qLI.list_price__c = 1200;
+        qLI.OLI_Status__c = 'In Progress';
+        qLI.Cancelled_LineItem__c = false;
+        qLI.Retract_Line_Item__c = false; 
+        qLI.SAP_LineItem_Number__c = '7000225-1';  
+        qLI.Cancelled_LineItem__c = True;
+        qLI.Retract_Line_Item__c = False;
+        
+        //insert qLI;
+        //End----Quote creation logic
+        oppTest.Commit_to_Forecast__c=false;
+        //oppTest.CIPS_PSFlag__c= true;
+        //oppTest.CIPS_Demand_Number__c= 'CIPSDEMAND';
+        oppTest.stagename = Label.Opportunity_Stage_8;
+
+        //update opptest;
+
+        Test.stopTest();
+    } 
