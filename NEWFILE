@@ -1,90 +1,60 @@
 @isTest
-private class OpportunityCampaignAssociationTest {
-    static testMethod void testOpptyCampaignAssociation() {
-        // Create test data for cloned opportunities
-        List<Opportunity> clonedOpps = new List<Opportunity>();
-        for(Integer i = 0; i < 5; i++) {
-            Opportunity opp = new Opportunity(Name = 'Cloned Opp ' + i, StageName = 'Prospecting', CloseDate = Date.today());
-            clonedOpps.add(opp);
-        }
-        insert clonedOpps;
-
-        // Create test data for genesis opportunities
-        List<Opportunity> genesisOpps = new List<Opportunity>();
-        for(Integer i = 0; i < 3; i++) {
-            Opportunity opp = new Opportunity(Name = 'Genesis Opp ' + i, StageName = 'Prospecting', CloseDate = Date.today());
-            genesisOpps.add(opp);
-        }
-        insert genesisOpps;
-
-        // Create test data for campaign influences
-        List<CampaignInfluence> campInfluences = new List<CampaignInfluence>();
-        for(Opportunity clonedOpp : clonedOpps) {
-            CampaignInfluence campInfluence = new CampaignInfluence(OpportunityId = clonedOpp.Id, CampaignId = 'CampaignId1', ModelId = 'ModelId1');
-            campInfluences.add(campInfluence);
-        }
-        for(Opportunity genesisOpp : genesisOpps) {
-            CampaignInfluence campInfluence = new CampaignInfluence(OpportunityId = genesisOpp.Id, CampaignId = 'CampaignId2', ModelId = 'ModelId2');
-            campInfluences.add(campInfluence);
-        }
-        insert campInfluences;
-
-        // Call the method to be tested
-        Test.startTest();
-        OpportunityTriggerUtility.opptyCampaignAssociation(
-            new Map<Id, Id>{},
-            new Map<Id, String>{}
+private class OpportunityTriggerGenericHelperTest {
+    
+    @isTest
+    static void testOpportunityInsertAndUpdate() {
+        // Create a FINRA Registered User
+        User finraUser = TestDataFactory.createFinraRegisteredUser();
+        
+        // Create an opportunity and add the FINRA Registered User to the sales team
+        Opportunity testOpportunity = TestDataFactory.createTestOpportunity();
+        OpportunityTeamMember teamMember = new OpportunityTeamMember(
+            OpportunityId = testOpportunity.Id,
+            UserId = finraUser.Id,
+            TeamMemberRole = 'Sales Representative'
         );
-        Test.stopTest();
-
-        // Add assertions here if needed
-        // Example: System.assertEquals(expectedResult, actualResult);
+        insert teamMember;
+        
+        // Now update the opportunity to test your trigger logic
+        testOpportunity.StageName = 'Closed Won'; // Ensure this triggers the validation rule
+        update testOpportunity;
+        
+        // Add assertions as needed to verify expected behavior
+        // For example, verify that the update failed due to the validation rule
+        System.assertEquals('Prospecting', [SELECT StageName FROM Opportunity WHERE Id = :testOpportunity.Id].StageName);
     }
 }
 
 
 
-
-
-@isTest
-private class OpportunityTriggerUtilityTest {
+public class TestDataFactory {
     
-    @isTest
-    static void testUpdateCQSToNurtureSS8() {
-        // Create test data
-        Contact_Proposition__c cp1 = new Contact_Proposition__c(
-            // Add required fields
-            Name = 'Test Contact Proposition 1'
+    public static User createFinraRegisteredUser() {
+        Profile finraProfile = [SELECT Id FROM Profile WHERE Name = 'FINRA Registered User' LIMIT 1];
+        User finraUser = new User(
+            ProfileId = finraProfile.Id,
+            FirstName = 'Finra',
+            LastName = 'User',
+            Email = 'finra.user@example.com',
+            Username = 'finra.user@example.com' + System.currentTimeMillis(),
+            Alias = 'finrau',
+            TimeZoneSidKey = 'America/Los_Angeles',
+            LocaleSidKey = 'en_US',
+            EmailEncodingKey = 'UTF-8',
+            LanguageLocaleKey = 'en_US'
         );
-        insert cp1;
-        
-        // Create Contact_Proposition_Influence__c records
-        Contact_Proposition_Influence__c cpi1 = new Contact_Proposition_Influence__c(
-            Contact_Proposition__c = cp1.Id,
-            Opportunity_Sales_Stage__c = '7. Opportunity Acceptance'
-            // Add other required fields
+        insert finraUser;
+        return finraUser;
+    }
+
+    public static Opportunity createTestOpportunity() {
+        Opportunity testOpportunity = new Opportunity(
+            Name = 'Test Opportunity',
+            StageName = 'Prospecting', // Set initial stage as required by your validation rule
+            CloseDate = Date.today() + 30 // Adjust close date as needed
         );
-        insert cpi1;
-        
-        // Set up the test data for the method
-        Set<Id> opptyIds = new Set<Id>{ cpi1.ttr_Opp__c };
-        
-        // Start the test
-        Test.startTest();
-        OpportunityTriggerUtility.UpdateCQSToNurtureSS8(opptyIds);
-        Test.stopTest();
-        
-        // Query the Contact_Proposition__c records after the method execution
-        List<Contact_Proposition__c> updatedCpList = [SELECT Id, Open_Opportunities__c, Contact_Qualification_Status__c, Contact_Nurture_Reason__c FROM Contact_Proposition__c WHERE Id = :cp1.Id];
-        
-        // Verify the expected behavior
-        System.assertEquals(1, updatedCpList.size(), 'One Contact_Proposition__c record should have been updated');
-        Contact_Proposition__c updatedCp = updatedCpList[0];
-        System.assertEquals(0, updatedCp.Open_Opportunities__c, 'Open_Opportunities__c field should have been updated to 0');
-        System.assertEquals('Nurture', updatedCp
+        insert testOpportunity;
+        return testOpportunity;
+    }
+}
 
-
-
-
-
-OpportunityTriggerUtility.setQuotestoExpired(new Set<Id>{testOpportunity1.Id, testOpportunity2.Id}, new Set<Id>{testQuote1.Id}, new Set<Id>{testQuote2.Id});
