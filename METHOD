@@ -12,10 +12,6 @@ Test failure, method: OpportunityTriggerGenericHelperTest.performLegalEntityTest
 
 
 
-
-
-
-
 @isTest
 private class OppQuoteLineItemsSyncTest {
     @isTest
