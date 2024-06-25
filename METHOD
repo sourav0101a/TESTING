@@ -81,3 +81,145 @@ private class OppQuoteLineItemsSyncTest {
         System.assertEquals(qli.SortOrder, updatedOli.SortOrder);
     }
 }
+
+
+
+Deployment 'a0MSq000000XPpFMAW': Changes detected in target branch 'TrustUAT' after creation of the promotion branch 'promotion/P104531-DeployP104531TrustUAT1', auto merge successfully performed to incorporate the last changes to the deployment.[OpportunityTriggerGenericHelperTest.cls] key replaced with value 4 time(s)[OpportunityTriggerGenericHelperTest.cls] key replaced with value 4 time(s)[OpportunityTriggerGenericHelperTest.cls] key replaced with value 4 time(s)[OpportunityTriggerGenericHelperTest.cls] key replaced with value 4 time(s)Test failure, method: OpportunityTriggerGenericHelperTest.genericAfterInsert -- System.DmlException: Update failed. First exception on row 0 with id 0067600000A9FIEAA3; first error: FIELD_CUSTOM_VALIDATION_EXCEPTION, FINRA Registered User required on REDI opportunity.Please add FINRA Registered User to the opportunity sales team before moving the Sales Stage to 3 and above.: [] stack Class.OpportunityTriggerGenericHelperTest.genericAfterInsert: line 904, column 1Test failure, method: OpportunityTriggerGenericHelperTest.genericAfterUpdate -- System.LimitException: Too many SOQL queries: 101 stack Class.Opportunity_RM_Handler.Update_RM_Flag: line 111, column 1
+Class.OpportunityTriggerGenericHelper.genericAfterInsert: line 1025, column 1
+Class.MasterOpportunityTriggerHandler.AfterInsert: line 74, column 1
+Class.TriggerDispatcher.Run: line 38, column 1
+Trigger.MasterOpportunityTrigger: line 15, column 1Code coverage issue: OpportunityTriggerGenericHelper -- Test coverage of selected Apex Class is 71.718%, at least 75% test coverage is required
+
+static testmethod void genericAfterInsert(){
+        //Added for fixing Account Master error- start
+        Integration_Setting__c integrationSetting = new Integration_Setting__c();
+        integrationSetting.name = 'AccountConnect';
+        integrationSetting.API_Key__c = 'x-api-key';
+        integrationSetting.Endpoint_Server__c = 'https://dev.rasi.refinitiv.com';
+        integrationSetting.Endpoint_URI__c = 'api/v1/accounts/account-request';
+        integrationSetting.HTTP_Headers__c = 'Content-Type=>application/json';
+        integrationSetting.HTTP_Method__c = 'POST';
+        integrationSetting.Timeout__c = 120000;
+        integrationSetting.Enable_Logging__c = true;
+        
+        insert integrationSetting;
+        
+        system.assert(integrationSetting.Id != null);
+        List<Opportunity> oppList = new List<Opportunity>();
+        
+        List<Static_Values__c> sList =new List<Static_Values__c>();
+        Static_Values__c s1 = new Static_Values__c();
+        s1.Name='Account.Prospect';
+        s1.Value__c='012300000000erOAAQ';
+        Static_Values__c s2 = new Static_Values__c();
+        s2.Name='Account.Customer';
+        s2.Value__c='012400000004xe3AAA';
+        sList.add(s1);
+        sList.add(s2);
+        upsert sList;
+        //
+        
+        List<Opportunity> parentOpptyList = new List<Opportunity>{
+            new Opportunity(Name = 'Test Opportunity 1', StageName = 'Prospecting', CloseDate = Date.today()),
+            new Opportunity(Name = 'Test Opportunity 2', StageName = 'Needs Analysis', CloseDate = Date.today())
+        };
+        insert parentOpptyList;
+        
+        // Fetching CampaignInfluence data using utility method
+        List<CampaignInfluence> campInfluenceList = OpportunityTriggerUtility.getCampInfluenceList(new List<String>{parentOpptyList[0].Id});
+        
+        // Create test CampaignInfluence records using the fetched CampaignId and ModelId
+        List<CampaignInfluence> campaignInfluenceList = new List<CampaignInfluence>();
+        for(CampaignInfluence influence : campInfluenceList){
+            if(influence.Campaign.Unica_ID__c == '123'){
+                campaignInfluenceList.add(new CampaignInfluence(OpportunityId = parentOpptyList[0].Id, CampaignId = influence.CampaignId, ModelId = influence.ModelId, Campaign = influence.Campaign));
+            }
+        }
+        
+        // Adding additional CampaignInfluence record with hardcoded values for demonstration
+        //campaignInfluenceList.add(new CampaignInfluence(OpportunityId = parentOpptyList[1].Id, CampaignId = influence.CampaignId, ModelId = influence.ModelId, Campaign = new Campaign(Unica_ID__c = '456')));
+        
+       // Create test clonedOppMap
+        Map<id,id> clonedOppMap = new Map<id,id>();
+        Map<Id,String> genesisOppMap = new Map<Id,String>();
+        for(Opportunity opp : parentOpptyList) {
+            clonedOppMap.put(opp.Id, opp.Id);
+            genesisOppMap.put(opp.Id, opp.Associated_Id__c);
+        }
+             
+        
+        // OpportunityTriggerGenericHelper.opptyCampaignAssociation(clonedOppMap, genesisOppMap);
+        
+        //Test.startTest();
+        
+        //Test.stopTest();
+
+               
+        //start test
+       
+        
+        Test.startTest();
+                
+                
+        
+        PriceBook2 PricebookGenesis = optimisationTestUtility.getPricebook('Genesis Pricebook',false);
+        Account oppAccount12 = [SELECT id,name FROM Account WHERE Name = 'Acc23@'];
+       
+        // '0017j00000iHXi4AAG'
+        Opportunity opprecord = optimisationTestUtility.getOpportunityDetails('testingOpp',oppAccount12.id,'account',PricebookGenesis.id);
+        //opprecord.name = 'testingOpp';
+        //opprecord.stagename='Prospecting';
+        //opprecord.CloseDate = Date.ValueOf('2020-08-08');
+        //opprecord.Shipping_Country__c='India';
+        //insert opprecord;
+        opportunity opp = [select id,name from opportunity where name='testingOpp' limit 1];
+        Account ac = new Account();
+        ac.name='Acc23@';
+        ac.ShippingCountry ='India';
+        insert ac;
+        account acc = [select id,name from account where name ='Acc23@'  limit 1];
+        opp.tocPurchaseOrderNumber__c = '89076';
+        opp.Redi_Flag__c = 'True';
+        
+        
+        Static_Values__c statval=new Static_Values__c();
+        statval.Name='CTI_Scheduler_IsRunning';
+        statval.Value__c='false';
+        insert statval;
+        
+        update opp;
+        GenesisTrialConvertController.isconverted=false;
+        opportunity opp1 = optimisationTestUtility.getOpportunityDetails('clonedopp', acc.Id,'account',null);
+        opp1.tocClonedFrom__c = opp.Id;
+        opp1.StageName = Label.Opportunity_Stage_4;
+        opp1.Suppress_Approvals__c=true;
+        opp1.Suppress_Approval_Justification__c='test';
+        opp1.Commit_to_Forecast__c=true;
+        opp1.Redi_Flag__c = 'True';
+        oppList.add(opp1);
+        
+        opportunity opp2 = optimisationTestUtility.getOpportunityDetails('trailopp1', acc.Id,'account',null);
+        opp2.tocClonedFrom__c = null;
+        opp2.StageName = '2.test';
+        opp2.Trial_Opportunity__c = true;
+        opp2.Associated_Id__c = opp.Id;
+        opp2.Redi_Flag__c = 'true';
+        opp.Partner_Account__c = acc.id;
+        opp.Access_Statement__c = true;
+        opp.Redi_Flag__c = 'True';
+        // opp2.Suppress_Approvals__c=true;
+        //opp2.Suppress_Approval_Justification__c='test';
+        opplist.add(opp2);
+        
+        insert oppList;        
+        opp1.Commit_to_Forecast__c=false; // ADDED FOR GTT-1454
+        opp.Access_Statement__c = false;
+        update opp1;
+        
+        delete opp1; // added 23062020
+        //OpportunityTriggerGenericHelper.opptyCampaignAssociation(clonedOppMap, genesisOppMap);
+        OpportunityTriggerGenericHelper.opptyCampaignAssociation(clonedOppMap, genesisOppMap);
+        //stop test
+        Test.stopTest();
+    }
+
