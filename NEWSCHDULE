@@ -36,3 +36,4 @@ private class TestServiceBatchERTUpdate {
         }
     }
 }
+Test failure, method: OpportunityTriggerGenericHelperTest.genericAfterInsert -- System.DmlException: Update failed. First exception on row 0 with id 0067600000A9HPhAAN; first error: FIELD_CUSTOM_VALIDATION_EXCEPTION, FINRA Registered User required on REDI opportunity.Please add FINRA Registered User to the opportunity sales team before moving the Sales Stage to 3 and above.: [] stack Class.OpportunityTriggerGenericHelperTest.genericAfterInsert: line 953, column 1
