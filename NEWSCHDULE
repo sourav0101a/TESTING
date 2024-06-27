@@ -153,3 +153,75 @@
         Test.stopTest();
     }
 Test failure, method: OpportunityTriggerGenericHelperTest.genericAfterInsert -- System.DmlException: Update failed. First exception on row 0 with id 0067600000A9HPhAAN; first error: FIELD_CUSTOM_VALIDATION_EXCEPTION, FINRA Registered User required on REDI opportunity.Please add FINRA Registered User to the opportunity sales team before moving the Sales Stage to 3 and above.: [] stack Class.OpportunityTriggerGenericHelperTest.genericAfterInsert: line 953, column 1
+
+
+static testmethod void genericAfterInsert(){
+    // Create a FINRA Registered User
+    Profile p = [SELECT Id FROM Profile WHERE Name='System Administrator'];
+    String orgId = UserInfo.getOrganizationId();
+    String dateString = String.valueof(Datetime.now()).replace(' ','').replace(':','').replace('-','');
+    Integer randomInt = Integer.valueOf(math.rint(math.random()*1000000));
+    String uniqueName = orgId + dateString + randomInt;
+
+    User finraUser = new User(
+        Alias = 'FINRAUser',
+        Email = uniqueName + '@thomsonreuters.com',
+        EmailEncodingKey = 'UTF-8',
+        LastName = 'FINRA',
+        LanguageLocaleKey = 'en_US',
+        LocaleSidKey = 'en_US',
+        FINRA_Registered__c = true, // This field indicates the user is FINRA Registered
+        ProfileId = p.Id,
+        tfcrmTeamRole__c = 'Relationship Manager',
+        TimeZoneSidKey = 'America/Los_Angeles',
+        UserName = uniqueName + '@REDItest559' + orgId + '.com'
+    );
+    insert finraUser;
+
+    // Create an Account
+    Account ac = new Account(
+        Name = 'Acc230@',
+        ShippingStreet = 'test',
+        ShippingCity = 'test',
+        ShippingState = 'T1',
+        ShippingPostalCode = '123',
+        ShippingCountry = 'United States',
+        tfcmCustomerStatus__c = 'Prospect'
+    );
+    insert ac;
+
+    // Create an Opportunity and link it to the Account
+    Opportunity opprecord = new Opportunity(
+        Name = 'testingOpp',
+        AccountId = ac.Id,
+        tfcrmType__c = 'account',
+        CloseDate = System.Today() + 5,
+        StageName = '1. Appointment Scheduled',
+        REDI_Flag__c = 'True',
+        // Ensure the Pricebook2Id is set appropriately
+        // Pricebook2Id = PricebookGenesis.id  // Make sure this is correctly initialized in your code
+    );
+    insert opprecord;
+
+    // Add the FINRA Registered User to the Opportunity's Sales Team
+    OpportunityTeamMember teamMember = new OpportunityTeamMember(
+        OpportunityId = opprecord.Id,
+        UserId = finraUser.Id,
+        TeamMemberRole = 'Sales Representative'  // Adjust the role as needed
+    );
+    insert teamMember;
+
+    // Update the Opportunity's fields
+    opprecord.tocPurchaseOrderNumber__c = '89076';
+    opprecord.Redi_Flag__c = 'True';
+
+    // Perform the update within the context of the FINRA Registered User
+    System.runAs(finraUser){
+        update opprecord;
+    }
+
+    // Add assertions or further test logic as needed
+
+    // Stop test execution
+    Test.stopTest();
+}
