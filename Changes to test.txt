@@ -1,44 +1,30 @@
-@isTest
-public class OpportunityTriggerUtilityTest {
-
-    @isTest
-    static void testOpptyCampaignAssociation() {
-        // Create test opportunities
-        Opportunity clonedOpportunity1 = new Opportunity(Name = 'Test Opportunity 1', StageName = 'Prospecting');
-        Opportunity clonedOpportunity2 = new Opportunity(Name = 'Test Opportunity 2', StageName = 'Prospecting');
-        insert new List<Opportunity>{clonedOpportunity1, clonedOpportunity2};
-
-        // Create test campaigns
-        Campaign testCampaign1 = new Campaign(Name = 'Test Campaign 1', Unica_ID__c = 'Campaign1');
-        Campaign testCampaign2 = new Campaign(Name = 'Test Campaign 2', Unica_ID__c = 'Campaign2');
-        insert new List<Campaign>{testCampaign1, testCampaign2};
-
-        // Create test campaign influence records
-        List<CampaignInfluence> campaignInfluenceRecords = new List<CampaignInfluence>{
-            new CampaignInfluence(OpportunityId = clonedOpportunity1.Id, CampaignId = testCampaign1.Id, ModelId = 'Model1'),
-            new CampaignInfluence(OpportunityId = clonedOpportunity2.Id, CampaignId = testCampaign2.Id, ModelId = 'Model2')
-        };
-        insert campaignInfluenceRecords;
-
-        // Prepare clonedOppMap with test data
-        Map<Id, Id> clonedOppMap = new Map<Id, Id>{
-            clonedOpportunity1.Id => clonedOpportunity1.Id,
-            clonedOpportunity2.Id => clonedOpportunity2.Id
-        };
-
-        // Prepare genesisOppMap with test data
-        Map<Id, String> genesisOppMap = new Map<Id, String>{
-            clonedOpportunity1.Id => 'Test Campaign 1',
-            clonedOpportunity2.Id => 'Test Campaign 2'
-        };
-
-        // Call the method to be tested
-        Test.startTest();
-        OpportunityTriggerUtility.opptyCampaignAssociation(clonedOppMap, genesisOppMap);
-        Test.stopTest();
-
-        // Add assertions if needed
-    }
-}
-
-IF(ISBLANK(Likely_Restoration_Time__c),"Unpopulated", IF (Likely_Restoration_Time__c < NOW(),"Breached", IF((Likely_Restoration_Time__c - NOW())*1440 <60,"Approaching Breach","Ok")))
+AND( ISPICKVAL(Cause__c, ''),
+OR(ISPICKVAL(Status, "Closed"),ISPICKVAL(Status, "Service Restored"),ISPICKVAL(Status, "Pending Knowledge Creation")),
+NOT( ISPICKVAL( Diagnosis_Summary__c ,'Content Explanation')),
+(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Content Search')) ),
+(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Application How to Use')) ),
+(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Application Func. Not Available')) ),
+(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Application/Desktop/File Conversion')) ),
+(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Missing Entitlements'))) ,
+(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Unconfirmed Trade'))),
+(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Counterparty Response Issue'))),
+(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Internal Component Failure'))),
+(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Trade/Order Status Confirmation'))),
+(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Trade/Order Detail Confirmation'))),
+(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Trade/Order Inquiry'))),
+(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Trade/Order Reject'))),
+(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Trade/Order Cancel or Amend'))),
+(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Trade Configuration/Setup'))),
+(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Post Trade Message Inquiry'))),
+(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Post Trade Message Failure'))),
+(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Start of Day/End of Day'))),
+(NOT(ISPICKVAL( Diagnosis_Summary__c ,'3rd Party/Vendor Issue'))),
+(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Application Unavailable'))),
+(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Password Reset'))),
+(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Account Locked/Disabled'))),
+(NOT(ISPICKVAL( Diagnosis_Summary__c ,'MFA Inquiry'))),
+(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Billing'))),
+(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Data Protection Act (DPA) – Dispute'))),
+(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Due diligence explanation'))),
+OR($RecordType.Name = "Service Cloud Case",$RecordType.Name = "Hot Topic"),
+$Profile.Name <>'System Administrator',$Profile.Name <> 'Integration',$Profile.Name <>'API',Text($User.UserType) <> $Setup.TRUST_Constants__c.UserType__c,NOT(CONTAINS($Setup.TRUST_Constants__c.Validation_Exclusion__c,$Profile.Name)))
