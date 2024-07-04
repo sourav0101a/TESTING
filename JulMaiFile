@@ -1,0 +1,382 @@
+/**
+Author:         serhiivolynets
+Date:           11/19/19
+Description:   
+**/
+
+public class OpportunityTriggerCPQHelper{
+    Public static boolean stopRecursion=false;
+    Final Static String NOT_APPLICABLE = 'Not Applicable';
+    Final Static String EC_RESTRICTED = 'EC Restricted';
+    Public static boolean stopUpdateRecursion = false;
+    public static String ValidationExclude = TRUST_Constants__c.getOrgDefaults().Validation_Exclusion__c;
+    
+    public static void beforeInsert(list<SObject> lOpty)
+    {
+        DateTime t = DateTime.now();
+        string timestamp = string.valueOfGmt(t);
+        set<id>sContractId = new set<id>();
+        set<id>sOptyId = new set<id>();
+        set<id>setAccountId = new set<id>();
+        map<id,id> newAmendISDMap = new map<id,id>();
+        newAmendISDMap.put(Schema.SObjectType.Opportunity.getRecordTypeInfosByDeveloperName().get(System.Label.recordTypeFTSER).getRecordTypeId(),Schema.SObjectType.Opportunity.getRecordTypeInfosByDeveloperName().get(System.Label.recordTypeAmendment_FTSE_Russell_B_I).getRecordTypeId());
+        newAmendISDMap.put(Schema.SObjectType.Opportunity.getRecordTypeInfosByDeveloperName().get(System.Label.recordTypeMergent).getRecordTypeId(),Schema.SObjectType.Opportunity.getRecordTypeInfosByDeveloperName().get(System.Label.recordTypeAmendment_Mergent).getRecordTypeId());
+        newAmendISDMap.put(Schema.SObjectType.Opportunity.getRecordTypeInfosByDeveloperName().get(System.Label.recordTypeYield_Book).getRecordTypeId(),Schema.SObjectType.Opportunity.getRecordTypeInfosByDeveloperName().get(System.Label.recordTypeAmendment_Yield_Book).getRecordTypeId());
+        newAmendISDMap.put(Schema.SObjectType.Opportunity.getRecordTypeInfosByDeveloperName().get(System.Label.recordTypeSEDOL).getRecordTypeId(),Schema.SObjectType.Opportunity.getRecordTypeInfosByDeveloperName().get(System.Label.recordTypeAmendment_SEDOL).getRecordTypeId());
+        Id oppRecordTypeId = Schema.SObjectType.Opportunity.getRecordTypeInfosByDeveloperName().get(System.Label.Oppty_RT_Refinitiv_Access).getRecordTypeId();
+        
+        set<id> accountIds = new set<id>();
+        for (opportunity opp : (List<Opportunity>)lOpty)
+        {
+            setAccountId.add(opp.AccountId);
+            if (opp.SBQQ__AmendedContract__c == null && opp.SBQQ__RenewedContract__c == null) //QCCF-187 To update creator field if opportunity is not amendment
+            {
+                opp.Creator__c =  UserInfo.getUserId(); // Update with logged in user
+            }
+            if (opp.SBQQ__AmendedContract__c != null) // if the opportunity is amendment
+            {
+                sContractId.add(opp.SBQQ__AmendedContract__c); // collect contract id's of amendment opportunities              
+                opp.name = opp.name + ' ' + timestamp; // add the timestamp to opportunity name
+            }
+            if (opp.SBQQ__RenewedContract__c != null) // if the opportunity is Renewal
+                  
+            {
+                
+                sContractId.add(opp.SBQQ__RenewedContract__c); // collect contract id's of renewed opportunities                
+            }
+        }
+        if (!sContractId.isEmpty())
+        {
+            //CRMU-2793, CRMU-2795, CRMU-2796 fix owner id added in below query
+            map<id, Contract> mCon = new map<id, Contract>([
+                    select Id,SBQQ__Opportunity__r.RecordTypeId,ownerid,RecordType.Name,lastModifiedById, ContractNumber, Account.Name,EndDate,SBQQ__Opportunity__r.Name,Cancellation_Term__c,Migration_ID__c, Account.tfcmCountryCode__c
+                    from Contract
+                    where id in :sContractId
+            ]);
+            set<string> sTypes = new set<string>();
+            for (opportunity opp : (List<Opportunity>)lOpty)
+            {
+                if (opp.SBQQ__AmendedContract__c != null) // if the opportunity is amendment
+                {
+                    id recTypeId;
+                    contract con = mCon.get(opp.SBQQ__AmendedContract__c); // and the opportunity contract is found
+                    if (con != null)
+                    {
+                        opp.Creator__c = con.lastModifiedById; //QCCF-187
+                        recTypeId = con.SBQQ__Opportunity__r.RecordTypeId; // then we take the original opportunity record type into amendment opportunity
+                        if (recTypeId != null)
+                        {
+                         
+                            //get isd amend type from map
+                            ID isdAmendType = newAmendISDMap.get(recTypeId);
+                            opp.RecordTypeId = (isdAmendType!=null)?isdAmendType:recTypeId;
+                        }
+                            
+                        else if (con.RecordType.Name != null)
+                        {
+                            sTypes.add(con.RecordType.Name); 
+                        }
+                    }
+                    
+                }
+                if(opp.SBQQ__RenewedContract__c != null){
+                   
+                    contract con = mCon.get(opp.SBQQ__RenewedContract__c); // //QCCF-187; and the opportunity contract is found
+                    if (con != null){
+                        opp.Creator__c = con.lastModifiedById; //QCCF-187
+                    }
+                    //QCCF-1436/1180 START
+                    opp.CloseDate = mCon.get(opp.SBQQ__RenewedContract__c).EndDate - (Integer.valueOf(mCon.get(opp.SBQQ__RenewedContract__c).Cancellation_Term__c)); 
+                    opp.tocExpectedRevenueDate__c = mCon.get(opp.SBQQ__RenewedContract__c).EndDate;
+                    //QCCF-1436/1180 END
+                    opp.OwnerId = opp.Account_Owner_Id__c;
+
+                    datetime dt = mCon.get(opp.SBQQ__RenewedContract__c).EndDate;
+                    string monthName = dt.format('MMM');//QCCF-662 START
+                    string accName = mCon.get(opp.SBQQ__RenewedContract__c).Account.Name.length() > 40 ? mCon.get(opp.SBQQ__RenewedContract__c).Account.Name.substring(0, 40) : mCon.get(opp.SBQQ__RenewedContract__c).Account.Name;
+                    //check if it is ISD Type Renewal
+                    if(newAmendISDMap.containsKey(con.SBQQ__Opportunity__r.RecordTypeId))
+                    {
+                       // dt = opp.tocExpectedRevenueDate__c;
+                        opp.tocExpectedRevenueDate__c = mCon.get(opp.SBQQ__RenewedContract__c).EndDate.addDays(1);
+                        opp.CloseDate = mCon.get(opp.SBQQ__RenewedContract__c).EndDate;
+                        dt = Datetime.Newinstance(opp.tocExpectedRevenueDate__c.year(), opp.tocExpectedRevenueDate__c.month(), opp.tocExpectedRevenueDate__c.day());
+                        monthName = dt.format('MMM');//CRMU-1476
+                        opp.Name = mCon.get(opp.SBQQ__RenewedContract__c).SBQQ__Opportunity__r.Name +'-Renewal-' + monthName + '-' +mCon.get(opp.SBQQ__RenewedContract__c).EndDate.year() ; 
+                        opp.RecordTypeId=con.SBQQ__Opportunity__r.RecordTypeId;
+                        opp.OwnerId =con.ownerid;//CRMU-2793, CRMU-2795, CRMU-2796 fix
+                    }
+                    else if(mCon.get(opp.SBQQ__RenewedContract__c).Migration_ID__c == null && mCon.get(opp.SBQQ__RenewedContract__c).SBQQ__Opportunity__r.Name != null){
+                       opp.Name = mCon.get(opp.SBQQ__RenewedContract__c).Account.tfcmCountryCode__c + '-' + accName + '-Contract#' + mCon.get(opp.SBQQ__RenewedContract__c).ContractNumber + '-AutoRenewal-' +monthName + '-' +mCon.get(opp.SBQQ__RenewedContract__c).EndDate.year();
+                    }
+                    else{
+                        opp.Name = mCon.get(opp.SBQQ__RenewedContract__c).Account.tfcmCountryCode__c + '-' + accName + '-CPQ Migration-Contract#' + mCon.get(opp.SBQQ__RenewedContract__c).ContractNumber + '-AutoRenewal-' +monthName + '-' +mCon.get(opp.SBQQ__RenewedContract__c).EndDate.year();
+                    }//QCCF-662 END
+                    opp.tfcrmWinLossCommentary__c = 'Auto closure of renewal opportunity'; //Added for GTT-3991
+                    opp.tfcrmWinLossReason__c = 'Service/Relationship'; //Added for GTT-3991
+                    opp.Competitors__c = 'No Competitor'; //Added for GTT-3991
+                   // opp.CloseDate = mCon.get(opp.SBQQ__RenewedContract__c).EndDate.addDays(-90);
+                    System.debug('!!@ ');
+                    System.debug('!!@ '+ mCon.get(opp.SBQQ__RenewedContract__c).EndDate);
+                    System.debug('!!@ '+(Integer.valueOf(mCon.get(opp.SBQQ__RenewedContract__c).Cancellation_Term__c)));
+                    //opp.CloseDate = mCon.get(opp.SBQQ__RenewedContract__c).EndDate - (Integer.valueOf(mCon.get(opp.SBQQ__RenewedContract__c).Cancellation_Term__c)); 
+                    
+                    
+                }
+                if(newAmendISDMap.values().contains(opp.recordtypeid) || newAmendISDMap.keyset().contains(opp.recordtypeid))
+                {
+                    accountIds.add(opp.AccountId);
+                }
+            }
+            //fixed FUT defect : as Restriction and Account_Record_Region__c was blank renewal records were not visible to users.
+            if (!sTypes.isEmpty())
+            {
+                map<string, id> mRec = new map<string, id>();
+                for (RecordType rec :
+                [
+                        SELECT Id, DeveloperName, Name
+                        FROM RecordType
+                        where SobjectType = 'Opportunity'
+                ])
+                {
+                    mRec.put(rec.Name, rec.id);
+                }
+                for (opportunity opp : (List<Opportunity>)lOpty)
+                {
+                    if (opp.SBQQ__AmendedContract__c != null) // if the opportunity is amendment
+                    {
+
+                        contract con = mCon.get(opp.SBQQ__AmendedContract__c); // and the opportunity contract is found
+                        if (con != null)
+                        {
+                            id recTypeId = mRec.get(con.RecordType.Name); // then we take the original opportunity record type into amendment opportunity
+                            if (recTypeId != null)
+                            opp.RecordTypeId = recTypeId;
+                        }
+                    }
+                }
+            }
+        }
+        //fixed FUT defect : as Restriction and Account_Record_Region__c was blank renewal records were not visible to users.
+        List<User> loggedInUser = [SELECT Profile.Name FROM user WHERE Id =:userinfo.getUserId() WITH USER_MODE];
+        
+        String loggedInUserProfile = (String)loggedInUser[0].Profile.Name;
+         //moved Opportunity_Type_Validation_Edit to trigger
+         Id oppCommRT = Schema.SObjectType.Opportunity.getRecordTypeInfosByDeveloperName().get('Commercial').getRecordTypeId();
+         List<string> formTypeValues = new List<string>{'Administration','Renegotiation of Price and Terms','Notified cancel'};
+        if(!accountIds.isEmpty() || !setAccountId.isEmpty()){
+            map <id, Account> mapIdAccount= new map <id, Account>([SELECT id,CurrencyIsoCode,Restriction__c,Account_Record_Region__c from Account where (id in: accountIds OR id in: setAccountId)]);
+            for (Opportunity opp : (List<Opportunity>)lOpty){
+
+                if(formTypeValues.contains(opp.tfcrmType__c) && oppCommRT!=opp.recordTypeid && !newAmendISDMap.values().contains(opp.recordTypeid) && opp.Deal_Type__c=='Commercial')
+                {
+                    opp.adderror('Please choose Opportunity Type value from - "New Product,New Account or New User" only');
+                }
+                
+                Account act = mapIdAccount.get(opp.AccountId);
+				
+				if(opp.Account_Record_Region__c==null && act !=null && (!string.isblank(act.Account_Record_Region__c))){   
+                    opp.Account_Record_Region__c = act.Account_Record_Region__c;    
+                }
+				
+                if(!accountIds.isEmpty()){
+                    /*if(act !=null && (!string.isblank(act.Account_Record_Region__c))){   
+                        opp.Account_Record_Region__c = act.Account_Record_Region__c;    
+                    }*/
+                    String strRestriction = act.Restriction__c;
+                    if(act !=null && strRestriction == EC_RESTRICTED){
+                        opp.Restriction__c = strRestriction;
+                    }
+                    else if(act !=null && (strRestriction == NOT_APPLICABLE || String.isBlank(strRestriction))){
+                        if(loggedInUserProfile == System.Label.recordTypeMergent || loggedInUserProfile == System.Label.recordTypeSEDOL || 
+                        loggedInUserProfile == System.Label.profileYieldBook || loggedInUserProfile.contains(System.Label.profileFTSERussellBI)){
+                            opp.Restriction__c = NOT_APPLICABLE;
+                        } 
+                        else{
+                            opp.Restriction__c = '';
+                        }
+                    }
+                }
+                if(act != null && !setAccountId.isEmpty()){
+                    if((opp.isFromLead__c ==false && opp.SBQQ__Renewal__c !=true && String.isBlank(opp.Migration_ID__c) && (act.CurrencyIsoCode != opp.CurrencyIsoCode) &&  
+                    opp.Applications__c != 'CRMU' && opp.Deal_Type__c != 'Commercial' && opp.Deal_Type__c != 'Intelligent Entitlement' && opp.Deal_Type__c != 'High Volume Desktop' && opp.Deal_Type__c != 'Early Stage' && (opp.Pricebook2Id != 
+                    PAC_Commercial__c.getInstance().PAC_Pricebook__c) && opp.tfcrmMkt__c =='Reuters' && opp.trActiveQuoteInd__c ==false && opp.IsClosed==false)&&
+                    (loggedInUserProfile != System.Label.SystemAdmin && loggedInUserProfile != System.Label.API && loggedInUserProfile != System.Label.Integration && loggedInUserProfile != 'TF Help Desk')&& opp.GRC_Opportunity__c==false && 
+                    ((opp.Createddate >= date.valueOf('2010-09-06'))|| (opp.LeadSource!='')) &&   !ValidationExclude.contains(loggedInUserProfile)){
+                        opp.adderror('The opportunity Currency must be the same as the account Currency. Please change the Currency to the same currency as the account AND YOU MUST CHECK and UPDATE the revenue fields accordingly');
+                    }
+                    if((loggedInUserProfile != System.Label.SystemAdmin && loggedInUserProfile != System.Label.API && loggedInUserProfile != System.Label.Integration && 
+                    loggedInUserProfile != 'CDM User' && opp.tfcrmType__c != 'Cancellation' && opp.tfcrmType__c != 'Expected Cancel' && opp.tfcrmType__c != 'Notified Cancel' 
+                    && opp.tfcrmType__c != 'Notified Cancellation') && ((opp.Deal_Type__c != 'Commercial' || opp.Deal_Type__c != 'High Volume Desktop'|| opp.RecordTypeId != oppRecordTypeId )
+                    &&(opp.tfcrmType__c != 'Renegotiation of Price and Terms' && (opp.tocGSCSOneTimeRevenue__c >0 || opp.tocGSCSMonthlyRecurring__c > 0)))&& !String.isBlank(opp.Cancellation__c)){
+                        opp.adderror('Cancellation Type can only be populated against Cancellation Opportunities');
+                    }
+                }
+            }           
+        }
+    }
+    public static void afterInsert(Map<Id, SObject> newItems){
+        set<ID> actIdsSet = new set<ID>();
+        List<Opportunity> NewOppItems = (List<opportunity>)newItems.values();
+        set<id>sContractId = new set<id>();
+        for (opportunity opp : NewOppItems)
+        {
+            if (opp.SBQQ__RenewedContract__c != null) // if the opportunity is Renewal
+                  
+            {   
+                sContractId.add(opp.SBQQ__RenewedContract__c); // collect contract id's of renewed opportunities     
+                actIdsSet.add(opp.AccountId);
+            }
+            
+        }
+        
+        set<Id> actSetUniqueChk = new set<Id>();
+        List<Contract> listCont = new List<Contract>();
+        //if multiple contracts generated process records with MultiCont_Renewal_Forecast__c= true
+        //now set SBQQ__RenewalForecast__c = true and MultiCont_Renewal_Forecast__c=false for one record so that it will be processsed by Contract trigger
+        for(Contract cnt : [select Id,AccountId,MultiCont_Renewal_Forecast__c from Contract where AccountId in :actIdsSet and MultiCont_Renewal_Forecast__c = true])
+            {
+                if(!actSetUniqueChk.contains(cnt.AccountId))
+                {
+                    cnt.SBQQ__RenewalForecast__c = true;//
+                    cnt.MultiCont_Renewal_Forecast__c = false;
+                    listCont.add(cnt);
+                }
+            }
+            if(!listCont.isEmpty())
+            {
+               update listCont;
+            }
+
+    }
+    
+    public static void beforeUpdate(Map<Id, SObject> newItems, Map<Id, SObject> oldItems) {
+        system.debug('@@Inside beforeUpdate');
+        //====start to copy Restriction and Account_Record_Region field values from Account for CRMU-830=====
+        set<id> actIdsSet = new set<id>();
+        List<Opportunity> newOppRecs = (List<opportunity>)newItems.values();
+        List<User> loggedInUser = [SELECT Profile.Name FROM user WHERE Id =:userinfo.getUserId() WITH USER_MODE];
+        String loggedInUserProfile = (String)loggedInUser[0].Profile.Name;
+        Id oppRecordTypeId = Schema.SObjectType.Opportunity.getRecordTypeInfosByDeveloperName().get(System.Label.Oppty_RT_Refinitiv_Access).getRecordTypeId();
+        //moved Opportunity_Type_Validation_Edit to trigger
+        List<string> formTypeValues = new List<string>{'Administration','Renegotiation of Price and Terms','Notified cancel'};
+        
+        List<string> rtIDs = new  List<string>();
+        rtIDs.add(Schema.SObjectType.Opportunity.getRecordTypeInfosByDeveloperName().get('Commercial').getRecordTypeId());
+        rtIDs.add(Schema.SObjectType.Opportunity.getRecordTypeInfosByDeveloperName().get(System.Label.recordTypeAmendment_FTSE_Russell_B_I).getRecordTypeId());
+        rtIDs.add(Schema.SObjectType.Opportunity.getRecordTypeInfosByDeveloperName().get(System.Label.recordTypeAmendment_Mergent).getRecordTypeId());
+        rtIDs.add(Schema.SObjectType.Opportunity.getRecordTypeInfosByDeveloperName().get(System.Label.recordTypeAmendment_Yield_Book).getRecordTypeId());
+        rtIDs.add(Schema.SObjectType.Opportunity.getRecordTypeInfosByDeveloperName().get(System.Label.recordTypeAmendment_SEDOL).getRecordTypeId());
+         //moved Opportunity_Type_Validation_Edit to trigger
+        for (Opportunity opp : newOppRecs){
+            actIdsSet.add(opp.AccountId);
+        }
+        if(!actIdsSet.isEmpty() && stopUpdateRecursion == false) {//added stopUpdateRecursion to reolve 101 error for GTT-5382
+            map <id, Account> mapIdAccount= new map <id, Account>([SELECT id,CurrencyIsoCode,Restriction__c,Account_Record_Region__c 
+                                                                   from Account where id IN: actIdsSet]);
+            for (Opportunity opp : newOppRecs) {
+               
+                if(!rtIDs.contains(opp.recordTypeid) && formTypeValues.contains(opp.tfcrmType__c) &&  opp.Deal_Type__c=='Commercial')
+                {
+                    opp.adderror('Please choose Opportunity Type value from - "New Product,New Account or New User" only');
+                }
+                Opportunity oldOpp = (Opportunity)oldItems.get(opp.id);
+                Account act = mapIdAccount.get(opp.AccountId);
+                if(act != null) {
+                    //====start to copy Restriction and Account_Record_Region field values from Account for CRMU-830=====
+                    /*if(!string.isblank(act.Account_Record_Region__c)){  
+                        opp.Account_Record_Region__c = act.Account_Record_Region__c;
+                    }*/
+                    if(!string.isblank(act.Restriction__c)) {
+                        opp.Restriction__c = act.Restriction__c;
+                    }
+                    //added stopUpdateRecursion to reolve 101 error for GTT-5382
+                    stopUpdateRecursion = true;
+                    if((opp.isFromLead__c ==false && opp.SBQQ__Renewal__c !=true && String.isBlank(opp.Migration_ID__c) && (act.CurrencyIsoCode != opp.CurrencyIsoCode && opp.CurrencyIsoCode != oldOpp.CurrencyIsoCode && 
+                    opp.Applications__c != 'CRMU' && opp.Deal_Type__c != 'Commercial' && opp.Deal_Type__c !='Early Stage' && (opp.Pricebook2Id != 
+                    PAC_Commercial__c.getInstance().PAC_Pricebook__c) && opp.tfcrmMkt__c =='Reuters' && opp.trActiveQuoteInd__c ==false && opp.IsClosed==false)&&
+                    (loggedInUserProfile != System.Label.SystemAdmin && loggedInUserProfile != System.Label.API && loggedInUserProfile != System.Label.Integration && loggedInUserProfile != 'TF Help Desk')&& opp.GRC_Opportunity__c==false && 
+                    ((opp.Createddate >= date.valueOf('2010-09-06'))|| (opp.LeadSource!='')) &&   !ValidationExclude.contains(loggedInUserProfile))){
+                        opp.adderror('The opportunity Currency must be the same as the account Currency. Please change the Currency to the same currency as the account AND YOU MUST CHECK and UPDATE the revenue fields accordingly');
+                    }
+                    if((loggedInUserProfile != System.Label.SystemAdmin && loggedInUserProfile != System.Label.API && loggedInUserProfile != System.Label.Integration && 
+                    loggedInUserProfile != 'CDM User' && opp.tfcrmType__c != 'Cancellation' && opp.tfcrmType__c != 'Expected Cancel' && opp.tfcrmType__c != 'Notified Cancel' 
+                    && opp.tfcrmType__c != 'Notified Cancellation') && ((opp.Deal_Type__c != 'Commercial' || opp.Deal_Type__c != 'High Volume Desktop'|| opp.RecordTypeId != oppRecordTypeId )
+                    &&(opp.tfcrmType__c != 'Renegotiation of Price and Terms' && (opp.tocGSCSOneTimeRevenue__c >0 || opp.tocGSCSMonthlyRecurring__c > 0)))&& !String.isBlank(opp.Cancellation__c)){
+                        opp.adderror('Cancellation Type can only be populated against Cancellation Opportunities');
+                    }
+                }
+            }
+        }
+        //====end to copy Restriction and Account_Record_Region field values from Account for CRMU-830=====
+    }
+    
+    public static void afterUpdate(Map<Id, SObject> newItems, Map<Id, SObject> oldItems){
+        List<Opportunity> NewOppItems = (List<opportunity>)newItems.values();
+        map<id,String> mapOptyIdandDemandNum = new map<id,String>();
+        List<Interaction_Log__c> updateListIntectionLog  = new List<Interaction_Log__c>();
+        List<Opportunity> listOpp = new List<Opportunity>();
+        list<Opportunity> updateListOpportunity = new List<Opportunity>();
+        set<id> quoteId =new set<id>();
+        List<SBQQ__Quote__c> listQuote = new List<SBQQ__Quote__c>();
+        List<SBQQ__Quote__c> updateQuoteList = new List<SBQQ__Quote__c>();
+        for(Opportunity oppNew : NewOppItems){
+              Opportunity oldOpp = (Opportunity)oldItems.get(oppNew.id);
+            if(oppNew.deal_type__c == 'Commercial' && oppNew.CIPS_Demand_Number__c != null && ((oppNew.stagename == Label.Opportunity_Stage_1 || oppNew.stagename == Label.Opportunity_Stage_4) && (oppNew.stagename!=oldOpp.StageName && oldOpp.StageName == Label.Opportunity_Stage_8)|| (oppNew.stagename!=oldOpp.StageName && oppNew.StageName == Label.Opportunity_Stage_8)) ){
+                mapOptyIdandDemandNum.put(oppNew.id,oppNew.CIPS_Demand_Number__c);
+            }
+            if(oppNew.deal_type__c == 'Commercial' && oppNew.CIPS_Demand_Number__c != null && ((oppNew.CIPS_Demand_Status__c == 'Approved' ||oppNew.CIPS_Demand_Status__c == 'Completed') && oldOpp.CIPS_Demand_Status__c !=oppNew.CIPS_Demand_Status__c)){
+                quoteId.add(oppNew.SBQQ__PrimaryQuote__c);
+            }
+        }
+        if(!mapOptyIdandDemandNum.isEmpty()){
+        listOpp = [Select id,CIPS_Demand_Number__c,CIPS_PSFlag__c,CIPS_Demand_Status__c,CIPS_Demand_Manager__c,CIPS_Demand__c,stagename,(Select ID,Product2.CIPS_Professional_Service_Product__c from OpportunityLineItems) from Opportunity where id IN: mapOptyIdandDemandNum.keyset()];
+            for(Opportunity op : listOpp){ 
+                if(op.stagename !=Label.Opportunity_Stage_8){
+                Interaction_Log__c intLog = new Interaction_Log__c();
+                intLog.Description__c = op.CIPS_Demand_Number__c;
+                intLog.Opportunity__c = op.id;
+                intLog.Status__c='Processed';
+                updateListIntectionLog.add(intLog);
+                
+                op.CIPS_Demand_Number__c =null;
+                op.CIPS_Demand_Manager__c= null;
+                op.CIPS_Demand_Status__c= null;
+                op.CIPS_Demand__c = null;
+                }else{
+                for(OpportunityLineItem oli : op.OpportunityLineItems){
+                    if(oli.Product2.CIPS_Professional_Service_Product__c == true){
+                   
+                    op.CIPS_PSFlag__c = true;
+                    break;
+                    }
+                    else 
+                    op.CIPS_PSFlag__c = false;
+                    }
+                }      
+            updateListOpportunity.add(op);
+            }
+        }
+        if(!updateListOpportunity.isEmpty()){
+            TriggerUtility.objectNames.add('Opportunity');
+            update updateListOpportunity;
+        }
+  
+        if(!updateListIntectionLog.IsEmpty()){
+            insert updateListIntectionLog;
+        }
+     if(!quoteId.isEmpty()){
+           listQuote = [select id,SBQQ__Ordered__c,Permission_Start_Date__c,Custom_Ordered__c from SBQQ__Quote__c where id in:quoteId and SBQQ__Status__c = 'Ready for fulfillment' ];
+               for(SBQQ__Quote__c qo : listQuote){
+                   if(qo.SBQQ__Ordered__c == false && qo.Permission_Start_Date__c <= Date.today()){
+                        qo.SBQQ__Ordered__c = true;
+                        qo.Custom_Ordered__c = true;
+                        updateQuoteList.add(qo);
+                     }
+             }
+            if(!updateQuoteList.isEmpty()){
+                update updateQuoteList;
+           }
+       }
+    }
+}
