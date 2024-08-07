@@ -1,30 +1,17 @@
-AND( ISPICKVAL(Cause__c, ''),
-OR(ISPICKVAL(Status, "Closed"),ISPICKVAL(Status, "Service Restored"),ISPICKVAL(Status, "Pending Knowledge Creation")),
-NOT( ISPICKVAL( Diagnosis_Summary__c ,'Content Explanation')),
-(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Content Search')) ),
-(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Application How to Use')) ),
-(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Application Func. Not Available')) ),
-(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Application/Desktop/File Conversion')) ),
-(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Missing Entitlements'))) ,
-(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Unconfirmed Trade'))),
-(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Counterparty Response Issue'))),
-(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Internal Component Failure'))),
-(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Trade/Order Status Confirmation'))),
-(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Trade/Order Detail Confirmation'))),
-(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Trade/Order Inquiry'))),
-(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Trade/Order Reject'))),
-(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Trade/Order Cancel or Amend'))),
-(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Trade Configuration/Setup'))),
-(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Post Trade Message Inquiry'))),
-(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Post Trade Message Failure'))),
-(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Start of Day/End of Day'))),
-(NOT(ISPICKVAL( Diagnosis_Summary__c ,'3rd Party/Vendor Issue'))),
-(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Application Unavailable'))),
-(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Password Reset'))),
-(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Account Locked/Disabled'))),
-(NOT(ISPICKVAL( Diagnosis_Summary__c ,'MFA Inquiry'))),
-(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Billing'))),
-(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Data Protection Act (DPA) – Dispute'))),
-(NOT(ISPICKVAL( Diagnosis_Summary__c ,'Due diligence explanation'))),
-OR($RecordType.Name = "Service Cloud Case",$RecordType.Name = "Hot Topic"),
-$Profile.Name <>'System Administrator',$Profile.Name <> 'Integration',$Profile.Name <>'API',Text($User.UserType) <> $Setup.TRUST_Constants__c.UserType__c,NOT(CONTAINS($Setup.TRUST_Constants__c.Validation_Exclusion__c,$Profile.Name)))
+<!-- newCaseWithConfirmation.html -->
+<template>
+    <lightning-button label="New Case" onclick={handleClick}></lightning-button>
+</template>
+
+// newCaseWithConfirmation.js
+import { LightningElement } from 'lwc';
+
+export default class NewCaseWithConfirmation extends LightningElement {
+    handleClick() {
+        if (confirm('Do you want to create a new case?')) {
+            // Redirect to the standard Case creation page
+            window.location.href = '/lightning/o/Case/new'; // Redirect to the standard Case creation page
+        }
+    }
+}
+
