@@ -1,17 +1,110 @@
-<!-- newCaseWithConfirmation.html -->
 <template>
-    <lightning-button label="New Case" onclick={handleClick}></lightning-button>
+    <lightning-button label="New Case" onclick={handleButtonClick}></lightning-button>
+
+    <template if:true={isModalOpen}>
+        <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open">
+            <div class="slds-modal__container">
+                <header class="slds-modal__header">
+                    <button class="slds-button slds-modal__close slds-button_icon slds-button_icon-inverse" title="Close" onclick={handleClose}>
+                        <lightning-icon icon-name="utility:close" alternative-text="close" size="small"></lightning-icon>
+                        <span class="slds-assistive-text">Close</span>
+                    </button>
+                    <h2 class="slds-text-heading_medium">Create New Case</h2>
+                </header>
+                <div class="slds-modal__body slds-p-around_medium">
+                    <lightning-combobox
+                        name="recordType"
+                        label="Select Record Type"
+                        value={selectedRecordType}
+                        placeholder="Select a Record Type"
+                        options={recordTypeOptions}
+                        onchange={handleRecordTypeChange}>
+                    </lightning-combobox>
+                    <p>Do you want to create a new case with the selected record type?</p>
+                </div>
+                <footer class="slds-modal__footer">
+                    <lightning-button variant="neutral" label="Cancel" onclick={handleClose}></lightning-button>
+                    <lightning-button variant="brand" label="Create Case" onclick={handleConfirm}></lightning-button>
+                </footer>
+            </div>
+        </section>
+        <div class="slds-backdrop slds-backdrop_open"></div>
+    </template>
 </template>
 
-// newCaseWithConfirmation.js
-import { LightningElement } from 'lwc';
 
-export default class NewCaseWithConfirmation extends LightningElement {
-    handleClick() {
-        if (confirm('Do you want to create a new case?')) {
-            // Redirect to the standard Case creation page
-            window.location.href = '/lightning/o/Case/new'; // Redirect to the standard Case creation page
+
+
+
+import { LightningElement, track } from 'lwc';
+import getRecordTypeOptions from '@salesforce/apex/RecordTypeController.getRecordTypeOptions';
+
+export default class ConfirmationWithRecordType extends LightningElement {
+    @track isModalOpen = false;
+    @track recordTypeOptions = [];
+    @track selectedRecordType;
+
+    connectedCallback() {
+        this.loadRecordTypes();
+    }
+
+    loadRecordTypes() {
+        getRecordTypeOptions()
+            .then(result => {
+                this.recordTypeOptions = result.map(rt => ({
+                    label: rt.Name,
+                    value: rt.Id
+                }));
+            })
+            .catch(error => {
+                console.error('Error loading record types:', error);
+            });
+    }
+
+    handleButtonClick() {
+        this.isModalOpen = true;
+    }
+
+    handleClose() {
+        this.isModalOpen = false;
+    }
+
+    handleRecordTypeChange(event) {
+        this.selectedRecordType = event.detail.value;
+    }
+
+    handleConfirm() {
+        if (this.selectedRecordType) {
+            const caseCreationUrl = `/lightning/o/Case/new?recordTypeId=${this.selectedRecordType}`;
+            window.location.href = caseCreationUrl;
+        } else {
+            // Handle the case where no record type is selected
+            alert('Please select a record type before continuing.');
         }
+        this.isModalOpen = false;
     }
 }
 
+
+
+
+<?xml version="1.0" encoding="UTF-8"?>
+<LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>56.0</apiVersion>
+    <isExposed>true</isExposed>
+    <targets>
+        <target>lightning__RecordPage</target>
+        <target>lightning__AppPage</target>
+        <target>lightning__HomePage</target>
+        <target>lightning__FlowScreen</target>
+    </targets>
+</LightningComponentBundle>
+
+
+
+public with sharing class RecordTypeController {
+    @AuraEnabled(cacheable=true)
+    public static List<RecordType> getRecordTypeOptions() {
+        return [SELECT Id, Name FROM RecordType WHERE SObjectType = 'Case'];
+    }
+}
