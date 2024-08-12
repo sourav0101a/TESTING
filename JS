@@ -54,3 +54,63 @@ export default class RecordTypeSelection extends LightningElement {
         }
     }
 }
+
+
+
+import { LightningElement, track } from 'lwc';
+import { NavigationMixin } from 'lightning/navigation';
+import getRecordTypeOptions from '@salesforce/apex/RecordTypeController.getRecordTypeOptions';
+
+export default class RecordTypeSelection extends NavigationMixin(LightningElement) {
+    @track isModalOpen = false;
+    @track recordTypeOptions = [];
+    @track selectedRecordType;
+
+    connectedCallback() {
+        this.loadRecordTypes();
+    }
+
+    loadRecordTypes() {
+        getRecordTypeOptions()
+            .then(result => {
+                console.log('Record types fetched:', result);
+                this.recordTypeOptions = result.map(rt => ({
+                    label: rt.Name,
+                    value: rt.Id
+                }));
+            })
+            .catch(error => {
+                console.error('Error loading record types:', error);
+            });
+    }
+
+    openModal() {
+        this.isModalOpen = true;  // Changed from false to true to open the modal
+    }
+
+    handleClose() {
+        this.isModalOpen = false;
+    }
+
+    handleRecordTypeChange(event) {
+        this.selectedRecordType = event.detail.value;
+    }
+
+    handleCreateCase() {
+        if (this.selectedRecordType) {
+            this[NavigationMixin.Navigate]({
+                type: 'standard__objectPage',
+                attributes: {
+                    objectApiName: 'Case',
+                    actionName: 'new'
+                },
+                state: {
+                    recordTypeId: this.selectedRecordType
+                }
+            });
+            this.isModalOpen = false;
+        } else {
+            alert('Please select a record type before continuing.');
+        }
+    }
+}
