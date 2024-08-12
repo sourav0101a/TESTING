@@ -1,0 +1,29 @@
+import { LightningElement, track } from 'lwc';
+
+export default class RecordTypeSelection extends LightningElement {
+    @track isModalOpen = false;
+    @track selectedRecordType;
+
+    openModal() {
+        this.isModalOpen = true; // Open the modal
+    }
+
+    handleClose() {
+        this.isModalOpen = false;
+    }
+
+    handleRecordTypeChange(event) {
+        this.selectedRecordType = event.detail.value;
+    }
+
+    handleNavigateToRecordTypeSelection() {
+        // Base URL for the current Salesforce environment
+        const baseUrl = window.location.origin;
+
+        // Construct the URL for the new Case creation page with parameters
+        const caseCreationUrl = `${baseUrl}/lightning/o/Case/new?count=3&nooverride=1&useRecordTypeCheck=1&navigationLocation=LIST_VIEW`;
+
+        // Redirect to the constructed URL
+        window.location.href = caseCreationUrl;
+    }
+}
