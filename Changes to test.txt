@@ -1,16 +1,59 @@
-<template>
-    <!-- Modal container -->
-    <template if:true={isModalOpen}>
-        <div class="slds-backdrop slds-backdrop_open"></div>
-        <div class="slds-modal slds-fade-in-open">
-            <div class="slds-modal__container">
-                <h2 class="slds-text-heading_medium">Confirm Action</h2>
-                <p>Are you sure you want to proceed?</p>
-                <footer class="slds-modal__footer">
-                    <button class="slds-button slds-button_neutral" onclick={handleCancel}>Cancel</button>
-                    <button class="slds-button slds-button_brand" onclick={handleConfirm}>Confirm</button>
-                </footer>
-            </div>
-        </div>
-    </template>
-</template>
+import { api, LightningElement } from 'lwc';
+import { getRecordNotifyChange } from 'lightning/uiRecordApi';
+import newCase from '@salesforce/apex/SC_CommonLEX.newCase';
+import LightningAlert from 'lightning/alert';
+export default class Scnewcase extends LightningElement {
+	@api resType;
+	@api resMsg;
+    @api
+    newCaseContact(contactId){
+		console.log('value of contactId'+contactId);
+        getRecordNotifyChange([{recordId:contactId}]);
+        console.log('calling apex class');
+        newCase({conId:contactId})
+        .then(result => {
+			let conts = result;
+            let indexVal = conts.indexOf(",");
+            console.log('value of conts'+conts);
+            console.log('value of indexval'+indexVal);
+            this.resType = conts.slice(0,indexVal);
+            this.resMsg = conts.slice(indexVal+1);
+            console.log('vlaue of restype'+this.resType);
+            console.log('value of resmsg'+this.resMsg);
+			if(this.resType == "alert"){
+                LightningAlert.open({
+                    message: this.resMsg,
+                    theme: 'error', // a red theme intended for error states
+                    label: 'Error!', // this is the header text
+                }).then(() => {
+                    console.log('Inside alert event');
+                    const closeCaseModal = new CustomEvent('alerteventcase',{
+                        detail:{
+                            name:'closeCaseModal'
+                        }
+                    });
+                    this.dispatchEvent(closeCaseModal);
+                    console.log('event dispatached for alertevent');
+                });
+            }
+            else if(this.resType == 'URL'){
+                console.log('Entered else');
+                const caseEvent = new CustomEvent('createcaseevents',{
+                    detail:{
+                        urlToOpen: this.resMsg,
+                        name:'OpenPage'
+                    }
+                });
+                console.log('value of caseEvent'+caseEvent);
+                this.dispatchEvent(caseEvent);
+                console.log('Event dispatched');
+            }
+            else{
+                console.log('Error during case creation');
+            }
+		})
+		.catch(error => {
+            console.log('>>>>>>>>>>>>3' + error);
+        });	
+	}
+}
