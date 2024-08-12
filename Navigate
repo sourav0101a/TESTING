@@ -1,29 +1,69 @@
-import { LightningElement, track } from 'lwc';
+import { api, LightningElement, track } from 'lwc';
+import { getRecordNotifyChange } from 'lightning/uiRecordApi';
+import newCase from '@salesforce/apex/SC_CommonLEX.newCase';
+import LightningAlert from 'lightning/alert';
 
-export default class RecordTypeSelection extends LightningElement {
-    @track isModalOpen = false;
-    @track selectedRecordType;
+export default class Scnewcase extends LightningElement {
+    @api resType;
+    @api resMsg;
+    @track showConfirmationModal = false;
+    contactIdToProcess;
 
-    openModal() {
-        this.isModalOpen = true; // Open the modal
+    @api
+    newCaseContact(contactId) {
+        this.contactIdToProcess = contactId;
+        this.showConfirmationModal = true; // Show confirmation modal
     }
 
-    handleClose() {
-        this.isModalOpen = false;
+    handleConfirm() {
+        this.showConfirmationModal = false; // Hide modal
+        this.processCaseCreation(this.contactIdToProcess); // Proceed with case creation
     }
 
-    handleRecordTypeChange(event) {
-        this.selectedRecordType = event.detail.value;
+    handleCancel() {
+        this.showConfirmationModal = false; // Hide modal
     }
 
-    handleNavigateToRecordTypeSelection() {
-        // Base URL for the current Salesforce environment
-        const baseUrl = window.location.origin;
+    closeModal() {
+        this.showConfirmationModal = false; // Hide modal
+    }
 
-        // Construct the URL for the new Case creation page with parameters
-        const caseCreationUrl = `${baseUrl}/lightning/o/Case/new?count=3&nooverride=1&useRecordTypeCheck=1&navigationLocation=LIST_VIEW`;
+    processCaseCreation(contactId) {
+        getRecordNotifyChange([{ recordId: contactId }]);
+        newCase({ conId: contactId })
+            .then(result => {
+                let conts = result;
+                let indexVal = conts.indexOf(",");
+                this.resType = conts.slice(0, indexVal);
+                this.resMsg = conts.slice(indexVal + 1);
 
-        // Redirect to the constructed URL
-        window.location.href = caseCreationUrl;
+                if (this.resType === "alert") {
+                    LightningAlert.open({
+                        message: this.resMsg,
+                        theme: 'error',
+                        label: 'Error!',
+                    }).then(() => {
+                        const closeCaseModal = new CustomEvent('alerteventcase', {
+                            detail: {
+                                name: 'closeCaseModal'
+                            }
+                        });
+                        this.dispatchEvent(closeCaseModal);
+                    });
+                } else if (this.resType === 'URL') {
+                    const caseEvent = new CustomEvent('createcaseevents', {
+                        detail: {
+                            urlToOpen: this.resMsg,
+                            name: 'OpenPage'
+                        }
+                    });
+                    this.dispatchEvent(caseEvent);
+                } else {
+                    console.log('Error during case creation');
+                }
+            })
+            .catch(error => {
+                console.log('Error: ', error);
+            });
     }
 }
