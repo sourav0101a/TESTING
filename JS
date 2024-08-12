@@ -25,8 +25,15 @@ export default class RecordTypeSelection extends LightningElement {
     }
 
     openModal() {
-        this.isModalOpen = true;
+        this.isModalOpen = false;
+        const caseCreationUrl1 = `https://refinitiv--coreflxdev.sandbox.lightning.force.com/lightning/o/Case/new?count=3&nooverride=1&useRecordTypeCheck=1&navigationLocation=LIST_VIEW`;
+        window.location.href = caseCreationUrl1;
     }
+    // connectedCallback(){
+    //     const caseCreationUrl1 = `https://refinitiv--coreflxdev.sandbox.lightning.force.com/lightning/o/Case/new?count=3&nooverride=1&useRecordTypeCheck=1&navigationLocation=LIST_VIEW`;
+    //     window.location.href = caseCreationUrl1;
+
+    // }
 
     handleClose() {
         this.isModalOpen = false;
@@ -39,6 +46,7 @@ export default class RecordTypeSelection extends LightningElement {
     handleCreateCase() {
         if (this.selectedRecordType) {
             const caseCreationUrl = `/lightning/o/Case/new?recordTypeId=${this.selectedRecordType}`;
+            //const caseCreationUrl = `https://refinitiv--coreflxdev.sandbox.my.salesforce.com/setup/ui/recordtypeselect.jsp?ent=Case`
             window.location.href = caseCreationUrl;
             this.isModalOpen = false;
         } else {
