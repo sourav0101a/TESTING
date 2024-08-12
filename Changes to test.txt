@@ -1,7 +1,16 @@
 <template>
-    <lightning-button label="New Case" onclick={openModal}></lightning-button>
+    
+    <!-- <template> -->
+        <!-- <div class="slds-modal slds-fade-in-open"> -->
+        <div class="slds-modal__container">
+            <h2 class="slds-text-heading_medium">Confirm Action</h2>
+                <p> Are you sure you want to proceed?</p>
+                <button class="slds-button slds-button_brand" onclick={handleNavigateToRecordTypeSelection}> Confirm </button>
+            </div>
+        </div>
+    </template>
 
-    <template if:true={isModalOpen}>
+    <!-- <template if:true={isModalOpen}>
         <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open">
             <div class="slds-modal__container">
                 <header class="slds-modal__header">
@@ -32,5 +41,5 @@
             </div>
         </section>
         <div class="slds-backdrop slds-backdrop_open"></div>
-    </template>
-</template>
+    </template> -->
+<!-- </template> -->
