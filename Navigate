@@ -21,7 +21,7 @@ export default class Scnewcase extends LightningElement {
     }
 
     handleCancel() {
-        this.showConfirmationModal = false; // Hide modal
+        this.showConfirmationModal = false; // Hide modal without creating case
     }
 
     closeModal() {
