@@ -1,0 +1,51 @@
+To add a popup confirmation before creating a new case without changing the existing functionality, you can use a Visualforce page and a JavaScript redirect. Here's the updated custom logic:
+
+_Step 1: Create a Visualforce Page_
+
+- Go to Setup > Develop > Pages
+- Click "New" and choose "Visualforce Page"
+- Name the page (e.g., "CaseCreationConfirmation")
+- Paste the following code:
+```
+<apex:page>
+  <apex:sectionHeader title="Confirm Case Creation" />
+  <apex:form>
+    <apex:pageMessages />
+    <apex:outputPanel layout="block" styleClass="popupBackground">
+      <apex:outputPanel layout="block" styleClass="popupContent">
+        <h2>Confirm Case Creation</h2>
+        <p>Are you sure you want to create a new case?</p>
+        <apex:commandButton value="Yes" onclick="confirmCaseCreation()" />
+        <apex:commandButton value="No" onclick="cancelCaseCreation()" />
+      </apex:outputPanel>
+    </apex:outputPanel>
+  </apex:form>
+  <script>
+    function confirmCaseCreation() {
+      // Redirect to the standard case creation page
+      window.location.href = '/{!URLFOR($Action.Case.New)}';
+    }
+    function cancelCaseCreation() {
+      // Close the popup and return to the previous page
+      window.history.back();
+    }
+  </script>
+</apex:page>
+```
+_Step 2: Create a Quick Action_
+
+- Go to Setup > Object Manager > Case > Quick Actions
+- Click "New" and choose "Quick Action"
+- Name the action (e.g., "Confirm Case Creation")
+- Choose "Visualforce Page" as the action type
+- Select the Visualforce page created in Step 1
+- Save the quick action
+
+_Step 3: Add the Quick Action to the Case Page Layout_
+
+- Go to Setup > Object Manager > Case > Page Layouts
+- Edit the page layout
+- Add the quick action created in Step 2 to the layout, before the standard "New" button
+- Save the page layout
+
+Now, when you click the "New" button on the Case page, the popup confirmation will appear. If you click "Yes", it will redirect to the standard case creation page, allowing you to select the record type and continue with the case creation process. If you click "No", it will close the popup and return to the previous page.
