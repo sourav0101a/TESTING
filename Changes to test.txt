@@ -1,59 +1,26 @@
-import { api, LightningElement } from 'lwc';
-import { getRecordNotifyChange } from 'lightning/uiRecordApi';
-import newCase from '@salesforce/apex/SC_CommonLEX.newCase';
-import LightningAlert from 'lightning/alert';
-export default class Scnewcase extends LightningElement {
-	@api resType;
-	@api resMsg;
-    @api
-    newCaseContact(contactId){
-		console.log('value of contactId'+contactId);
-        getRecordNotifyChange([{recordId:contactId}]);
-        console.log('calling apex class');
-        newCase({conId:contactId})
-        .then(result => {
-			let conts = result;
-            let indexVal = conts.indexOf(",");
-            console.log('value of conts'+conts);
-            console.log('value of indexval'+indexVal);
-            this.resType = conts.slice(0,indexVal);
-            this.resMsg = conts.slice(indexVal+1);
-            console.log('vlaue of restype'+this.resType);
-            console.log('value of resmsg'+this.resMsg);
-			if(this.resType == "alert"){
-                LightningAlert.open({
-                    message: this.resMsg,
-                    theme: 'error', // a red theme intended for error states
-                    label: 'Error!', // this is the header text
-                }).then(() => {
-                    console.log('Inside alert event');
-                    const closeCaseModal = new CustomEvent('alerteventcase',{
-                        detail:{
-                            name:'closeCaseModal'
-                        }
-                    });
-                    this.dispatchEvent(closeCaseModal);
-                    console.log('event dispatached for alertevent');
-                });
-            }
-            else if(this.resType == 'URL'){
-                console.log('Entered else');
-                const caseEvent = new CustomEvent('createcaseevents',{
-                    detail:{
-                        urlToOpen: this.resMsg,
-                        name:'OpenPage'
-                    }
-                });
-                console.log('value of caseEvent'+caseEvent);
-                this.dispatchEvent(caseEvent);
-                console.log('Event dispatched');
-            }
-            else{
-                console.log('Error during case creation');
-            }
-		})
-		.catch(error => {
-            console.log('>>>>>>>>>>>>3' + error);
-        });	
-	}
-}
+<template>
+    <!-- Your existing template -->
+
+    <!-- Confirmation Modal -->
+    <template if:true={showConfirmationModal}>
+        <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open">
+            <div class="slds-modal__container">
+                <header class="slds-modal__header">
+                    <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse" title="Close" onclick={closeModal}>
+                        <lightning-icon icon-name="utility:close" alternative-text="close" size="small"></lightning-icon>
+                        <span class="slds-assistive-text">Close</span>
+                    </button>
+                    <h2 class="slds-text-heading_medium">Confirmation</h2>
+                </header>
+                <div class="slds-modal__body">
+                    <p>Are you sure you want to open the case?</p>
+                </div>
+                <footer class="slds-modal__footer">
+                    <lightning-button variant="neutral" label="Cancel" onclick={handleCancel}></lightning-button>
+                    <lightning-button variant="brand" label="Yes" onclick={handleConfirm}></lightning-button>
+                </footer>
+            </div>
+        </section>
+        <div class="slds-backdrop slds-backdrop_open"></div>
+    </template>
+</template>
