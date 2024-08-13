@@ -4,32 +4,27 @@
 
     <!-- Confirmation Modal -->
     <aura:if isTrue="{!v.showConfirmationModal}">
-        <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open">
-            <div class="slds-modal__container">
-                <header class="slds-modal__header">
-                    <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse" title="Close" onclick="{!c.closeModal}">
+        <section role="dialog" tabindex="-1" class="slds-fade-in-open">
+            <div>
+                <header>
+                    <!-- <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse" title="Close" onclick="{!c.closeModal}">
                         <lightning:icon iconName="utility:close" alternativeText="close" size="small"/>
                         <span class="slds-assistive-text">Close</span>
-                    </button>
+                    </button> -->
                     <h2 class="slds-text-heading_medium">Confirmation</h2>
                 </header>
-                <div class="slds-modal__body">
+                <div>
                     <p>Are you sure you want to create a new case?</p>
                 </div>
-                <footer class="slds-modal__footer">
+                <footer>
                     <lightning:button variant="neutral" label="Cancel" onclick="{!c.handleCancel}"/>
                     <lightning:button variant="brand" label="Yes" onclick="{!c.handleConfirm}"/>
                 </footer>
             </div>
         </section>
-        <div class="slds-backdrop slds-backdrop_open"></div>
     </aura:if>
 
-    <!-- Main content area, potentially with a button to trigger the confirmation -->
-    <div>
-        <lightning:button label="Create Case" onclick="{!c.createCaseCall}"/>
-    </div>
-
+    
     <!-- Lightning components for workspace and navigation -->
     <lightning:workspaceAPI aura:id="workspace"/>
     <lightning:navigation aura:id="navService"/>
@@ -37,6 +32,9 @@
     <aura:handler name="init" value="{!this}" action="{!c.init}"/>
     <aura:handler name="render" value="{!this}" action="{!c.createCaseCall}"/>
 </aura:component>
+
+
+
 
 ({
     init : function(component, event, helper) {
