@@ -1,0 +1,94 @@
+<aura:component implements="force:appHostable,flexipage:availableForAllPageTypes,flexipage:availableForRecordHome,force:hasRecordId,forceCommunity:availableForAllPageTypes,force:lightningQuickActionWithoutHeader" access="global">
+    <aura:attribute name="showConfirmationModal" type="Boolean" default="false"/>
+    <aura:attribute name="recordId" type="String"/>
+
+    <!-- Confirmation Modal -->
+    <aura:if isTrue="{!v.showConfirmationModal}">
+        <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open">
+            <div class="slds-modal__container">
+                <header class="slds-modal__header">
+                    <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse" title="Close" onclick="{!c.closeModal}">
+                        <lightning:icon iconName="utility:close" alternativeText="close" size="small"/>
+                        <span class="slds-assistive-text">Close</span>
+                    </button>
+                    <h2 class="slds-text-heading_medium">Confirmation</h2>
+                </header>
+                <div class="slds-modal__body">
+                    <p>Are you sure you want to create a new case?</p>
+                </div>
+                <footer class="slds-modal__footer">
+                    <lightning:button variant="neutral" label="Cancel" onclick="{!c.handleCancel}"/>
+                    <lightning:button variant="brand" label="Yes" onclick="{!c.handleConfirm}"/>
+                </footer>
+            </div>
+        </section>
+        <div class="slds-backdrop slds-backdrop_open"></div>
+    </aura:if>
+
+    <div>
+        <p>Case creation in progress</p>
+    </div>
+    <lightning:workspaceAPI aura:id="workspace"/>
+    <lightning:navigation aura:id="navService"/>
+    <c:scnewcase aura:id="ncase" onalerteventcase="{!c.closeModal}" oncreatecaseevents="{!c.openCaseEdit}"/>
+    <aura:handler name="init" value="{!this}" action="{!c.init}"/>
+    <aura:handler name="render" value="{!this}" action="{!c.createCaseCall}"/>
+</aura:component>
+
+
+
+
+({
+    init : function(component, event, helper) {
+        // Initialization logic if needed
+    },
+
+    createCaseCall : function(component, event, helper) {
+        console.log("Entered createCaseCall controller");
+        var recId = component.get("v.recordId");
+        console.log('Value of recId: ' + recId);
+
+        // Show the confirmation modal
+        component.set("v.showConfirmationModal", true);
+        component.set("v.recordId", recId); // Store recordId for use in confirmation
+    },
+
+    handleConfirm : function(component, event, helper) {
+        console.log('User confirmed case creation');
+        component.set("v.showConfirmationModal", false); // Hide the modal
+
+        var recId = component.get("v.recordId");
+        var lwcRef = component.find("ncase");
+        lwcRef.newCaseContact(recId); // Proceed with case creation
+    },
+
+    handleCancel : function(component, event, helper) {
+        console.log('User cancelled case creation');
+        component.set("v.showConfirmationModal", false); // Hide the modal
+    },
+
+    closeModal : function(component, event, helper) {
+        console.log('Closing quick action');
+        $A.get("e.force:closeQuickAction").fire();
+    },
+
+    openCaseEdit : function(component, event, helper) {
+        console.log('Entered openCaseEdit');
+        var workspaceAPI = component.find("workspace");
+        var navigatorApi = component.find('navService');
+        var subTabURL = event.getParam('urlToOpen');
+        console.log('Value of subTabURL: ' + subTabURL);
+
+        workspaceAPI.getEnclosingTabId().then(function(tabId) {
+            workspaceAPI.openSubtab({
+                parentTabId: tabId,
+                recordId: subTabURL,
+                focus: true
+            });
+        }).catch(function(error) {
+            console.log(error);
+        });
+
+        $A.get("e.force:closeQuickAction").fire();
+    }
+})
