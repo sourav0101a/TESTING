@@ -25,18 +25,18 @@
         <div class="slds-backdrop slds-backdrop_open"></div>
     </aura:if>
 
+    <!-- Main content area, potentially with a button to trigger the confirmation -->
     <div>
-        <p>Case creation in progress</p>
+        <lightning:button label="Create Case" onclick="{!c.createCaseCall}"/>
     </div>
+
+    <!-- Lightning components for workspace and navigation -->
     <lightning:workspaceAPI aura:id="workspace"/>
     <lightning:navigation aura:id="navService"/>
     <c:scnewcase aura:id="ncase" onalerteventcase="{!c.closeModal}" oncreatecaseevents="{!c.openCaseEdit}"/>
     <aura:handler name="init" value="{!this}" action="{!c.init}"/>
     <aura:handler name="render" value="{!this}" action="{!c.createCaseCall}"/>
 </aura:component>
-
-
-
 
 ({
     init : function(component, event, helper) {
@@ -45,12 +45,11 @@
 
     createCaseCall : function(component, event, helper) {
         console.log("Entered createCaseCall controller");
-        var recId = component.get("v.recordId");
-        console.log('Value of recId: ' + recId);
 
         // Show the confirmation modal
         component.set("v.showConfirmationModal", true);
-        component.set("v.recordId", recId); // Store recordId for use in confirmation
+        var recId = component.get("v.recordId"); // Ensure recordId is correctly set
+        console.log('Value of recId: ' + recId);
     },
 
     handleConfirm : function(component, event, helper) {
