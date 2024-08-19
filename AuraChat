@@ -8,29 +8,43 @@
 
     <!-- Confirmation Modal -->
     <aura:if isTrue="{!v.showConfirmation}">
-        <lightning:modal header="Confirm" onclose="{!c.handleClose}">
-            <p>Are you sure you want to create a case?</p>
-            <lightning:button variant="neutral" label="No" onclick="{!c.handleNo}" />
-            <lightning:button variant="brand" label="Yes" onclick="{!c.handleYes}" />
-        </lightning:modal>
+        <div class="slds-modal slds-fade-in-open">
+            <div class="slds-modal__container">
+                <header class="slds-modal__header">
+                    <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse" title="Close" onclick="{!c.handleClose}">
+                        <lightning:icon iconName="utility:close" alternativeText="close" size="small"/>
+                        <span class="slds-assistive-text">Close</span>
+                    </button>
+                    <h2 class="slds-text-heading_medium">Confirm</h2>
+                </header>
+                <div class="slds-modal__body">
+                    <p>Are you sure you want to create a case?</p>
+                </div>
+                <footer class="slds-modal__footer">
+                    <lightning:button variant="neutral" label="No" onclick="{!c.handleNo}" />
+                    <lightning:button variant="brand" label="Yes" onclick="{!c.handleYes}" />
+                </footer>
+            </div>
+        </div>
+        <div class="slds-backdrop slds-backdrop_open"></div>
     </aura:if>
 
     <aura:handler name="init" value="{!this}" action="{!c.init}"/>
-    <aura:handler name="render" value="{!this}" action="{!c.createCaseCall}"/>
 </aura:component>
 
 ({
     init : function(component, event, helper) {
+        // Initialize component attributes
         component.set("v.showConfirmation", false);
     },
 
     createCaseCall : function(component, event, helper) {
         console.log("entered aura controller");
-        var recId = component.get("v.recordId");
-        console.log('value of recId: ' + recId);
         
-        // Show the confirmation modal
-        component.set("v.showConfirmation", true);
+        // Check if confirmation is already shown
+        if (!component.get("v.showConfirmation")) {
+            component.set("v.showConfirmation", true);
+        }
     },
 
     handleClose : function(component, event, helper) {
@@ -46,6 +60,8 @@
     handleYes : function(component, event, helper) {
         // User clicked "Yes", so proceed with creating the case
         component.set("v.showConfirmation", false);
+
+        // Call the create case logic after confirmation
         var recId = component.get("v.recordId");
         var lwcRef = component.find("ncase");
         lwcRef.newCaseContact(recId);
@@ -60,7 +76,6 @@
         console.log('Entered Aura Event');
         console.log('Value of params: ' + event);
         var workspaceAPI = component.find("workspace");
-        var navigatorApi = component.find('navService');
         var subTabURL = event.getParam('urlToOpen');
         console.log('value of subTabURL: ' + subTabURL);
         var parentTab;
