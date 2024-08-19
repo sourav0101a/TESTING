@@ -1,0 +1,81 @@
+<aura:component implements="force:appHostable,flexipage:availableForAllPageTypes,flexipage:availableForRecordHome,force:hasRecordId,forceCommunity:availableForAllPageTypes,force:lightningQuickActionWithoutHeader" access="global">
+    
+    <lightning:workspaceAPI aura:id="workspace" />
+    <lightning:navigation aura:id="navService"/>
+
+    <!-- Custom component -->
+    <c:scnewcase aura:id="ncase" onalerteventcase="{!c.closeModal}" oncreatecaseevents="{!c.openCaseEdit}" />
+
+    <!-- Confirmation Modal -->
+    <aura:if isTrue="{!v.showConfirmation}">
+        <lightning:modal header="Confirm" onclose="{!c.handleClose}">
+            <p>Are you sure you want to create a case?</p>
+            <lightning:button variant="neutral" label="No" onclick="{!c.handleNo}" />
+            <lightning:button variant="brand" label="Yes" onclick="{!c.handleYes}" />
+        </lightning:modal>
+    </aura:if>
+
+    <aura:handler name="init" value="{!this}" action="{!c.init}"/>
+    <aura:handler name="render" value="{!this}" action="{!c.createCaseCall}"/>
+</aura:component>
+
+({
+    init : function(component, event, helper) {
+        component.set("v.showConfirmation", false);
+    },
+
+    createCaseCall : function(component, event, helper) {
+        console.log("entered aura controller");
+        var recId = component.get("v.recordId");
+        console.log('value of recId: ' + recId);
+        
+        // Show the confirmation modal
+        component.set("v.showConfirmation", true);
+    },
+
+    handleClose : function(component, event, helper) {
+        // Close the modal
+        component.set("v.showConfirmation", false);
+    },
+
+    handleNo : function(component, event, helper) {
+        // User clicked "No", so close the modal
+        component.set("v.showConfirmation", false);
+    },
+
+    handleYes : function(component, event, helper) {
+        // User clicked "Yes", so proceed with creating the case
+        component.set("v.showConfirmation", false);
+        var recId = component.get("v.recordId");
+        var lwcRef = component.find("ncase");
+        lwcRef.newCaseContact(recId);
+    },
+
+    closeModal : function(component, event) {
+        console.log('entered alert event');
+        $A.get("e.force:closeQuickAction").fire();
+    },
+
+    openCaseEdit : function(component, event) {
+        console.log('Entered Aura Event');
+        console.log('Value of params: ' + event);
+        var workspaceAPI = component.find("workspace");
+        var navigatorApi = component.find('navService');
+        var subTabURL = event.getParam('urlToOpen');
+        console.log('value of subTabURL: ' + subTabURL);
+        var parentTab;
+        workspaceAPI.getEnclosingTabId().then(function(tabId) {
+            console.log(tabId);
+            parentTab = tabId;
+        })
+        .catch(function(error) {
+            console.log(error);
+        });
+        workspaceAPI.openSubtab({
+                parentTabId: parentTab,
+                recordId: subTabURL,
+                focus: true,
+        });
+        $A.get("e.force:closeQuickAction").fire(); 
+    }
+})
