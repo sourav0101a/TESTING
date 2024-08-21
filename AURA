@@ -1,48 +1,14 @@
-<aura:component implements="force:appHostable,flexipage:availableForAllPageTypes,flexipage:availableForRecordHome,force:hasRecordId,forceCommunity:availableForAllPageTypes,force:lightningQuickActionWithoutHeader" access="global" >
-    
-    <lightning:workspaceAPI aura:id="workspace" />
-    <lightning:navigation aura:id="navService"/>
-    
-    <c:scnewcase aura:id="ncase" onalerteventcase="{!c.closeModal}" oncreatecaseevents="{!c.openCaseEdit}" />
-    <aura:handler name="init" value="{!this}" action="{!c.init}"/>
-    <aura:handler name="render" value="{!this}" action="{!c.createCaseCall}"/>
-</aura:component>
-
-({//NOSONAR
-	init : function(component, event, helper) {
-		
-	},
-    createCaseCall : function(component, event, helper) {
-        console.log("entered aura controller");
-        var recId= component.get("v.recordId");
-        console.log('value of recId'+recId);
-        var lwcRef = component.find("ncase");
-        lwcRef.newCaseContact(recId);
-    },
-    closeModal : function(component,event){
-        console.log('entered alert event');
-        $A.get("e.force:closeQuickAction").fire();
-    },
-    openCaseEdit : function(component,event){
-        console.log('Entered Aura Event');
-        console.log('Value of params'+event);
-        var workspaceAPI = component.find("workspace");
-        var navigatorApi = component.find('navService')
-        var subTabURL = event.getParam('urlToOpen');
-        console.log('value of subTabURL'+subTabURL);
-        var parentTab;
-        workspaceAPI.getEnclosingTabId().then(function(tabId) {
-            console.log(tabId);
-            parentTab = tabId;
-        })
-        .catch(function(error) {
-            console.log(error);
-        });
-        workspaceAPI.openSubtab({
-                parentTabId: parentTab,
-                recordId: subTabURL,
-                focus: true,
-        });
-        $A.get("e.force:closeQuickAction").fire(); 
+public class PicklistHelper {
+    @InvocableMethod
+    public static void removeDuplicates(List<Id> accountIds) {
+        List<Account> accounts = [SELECT Id, Account_Service__c FROM Account WHERE Id IN :accountIds];
+        for (Account acc : accounts) {
+            if (acc.Account_Service__c != null) {
+                List<String> valuesList = new List<String>(acc.Account_Service__c.split(';'));
+                Set<String> uniqueValues = new Set<String>(valuesList);
+                acc.Account_Service__c = String.join(';', new List<String>(uniqueValues));
+            }
+        }
+        update accounts;
     }
-})
+}
