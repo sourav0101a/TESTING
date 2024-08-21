@@ -1,7 +1,7 @@
 public class PicklistHelper {
     @InvocableMethod
     public static void removeDuplicates(List<Id> accountIds) {
-        List<Account> accounts = [SELECT Id, Account_Service__c FROM Account WHERE Id IN :accountIds];
+        List<Account> accounts = [SELECT Id, NOM_Customer_Group__c FROM Account WHERE Id IN :accountIds];
         for (Account acc : accounts) {
             if (acc.Account_Service__c != null) {
                 // Split the multi-select picklist values into a list
