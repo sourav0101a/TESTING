@@ -12,7 +12,10 @@ public class PicklistHelper {
                 List<String> cleanedList = new List<String>(uniqueValues);
 
                 // Join the cleaned list back into a single string with semicolon delimiter
-                acc.Account_Service__c = String.join(';', cleanedList);
+                String joinedString = String.join(';', cleanedList);
+
+                // Assign the cleaned string back to the Account_Service__c field
+                acc.Account_Service__c = joinedString;
             }
         }
         update accounts;
