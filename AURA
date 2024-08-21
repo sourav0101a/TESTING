@@ -27,3 +27,16 @@ public class PicklistHelper {
         update accounts;
     }
 }
+
+// Create a new Account record with duplicate values in the multi-select picklist field
+Account testAccount = new Account(
+    Name = 'Test Account with Duplicates',
+    Account_Service__c = 'Service1;Service2;Service1;Service3;Service2'
+);
+
+// Insert the record
+insert testAccount;
+
+// Optional: Retrieve and output the record to verify
+Account insertedAccount = [SELECT Id, Name, Account_Service__c FROM Account WHERE Id = :testAccount.Id];
+System.debug('Inserted Account Service Field: ' + insertedAccount.Account_Service__c);
