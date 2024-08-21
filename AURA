@@ -4,9 +4,15 @@ public class PicklistHelper {
         List<Account> accounts = [SELECT Id, Account_Service__c FROM Account WHERE Id IN :accountIds];
         for (Account acc : accounts) {
             if (acc.Account_Service__c != null) {
+                // Split the multi-select picklist values into a list
                 List<String> valuesList = new List<String>(acc.Account_Service__c.split(';'));
+
+                // Remove duplicates by converting the list to a Set and then back to a List
                 Set<String> uniqueValues = new Set<String>(valuesList);
-                acc.Account_Service__c = String.join(';', new List<String>(uniqueValues));
+                List<String> cleanedList = new List<String>(uniqueValues);
+
+                // Join the cleaned list back into a single string with semicolon delimiter
+                acc.Account_Service__c = String.join(';', cleanedList);
             }
         }
         update accounts;
