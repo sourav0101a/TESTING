@@ -1,7 +1,7 @@
 public class PicklistHelper {
     @InvocableMethod
     public static void removeDuplicates(List<Id> accountIds) {
-        List<Account> accounts = [SELECT Id, NOM_Customer_Group__c FROM Account WHERE Id IN :accountIds];
+        List<Account> accounts = [SELECT Id, Account_Service__c FROM Account WHERE Id IN :accountIds];
         for (Account acc : accounts) {
             if (acc.Account_Service__c != null) {
                 // Split the multi-select picklist values into a list
@@ -11,8 +11,14 @@ public class PicklistHelper {
                 Set<String> uniqueValues = new Set<String>(valuesList);
                 List<String> cleanedList = new List<String>(uniqueValues);
 
-                // Join the cleaned list back into a single string with semicolon delimiter
-                String joinedString = String.join(';', cleanedList);
+                // Manually join the cleaned list into a single string with semicolon delimiter
+                String joinedString = '';
+                for (Integer i = 0; i < cleanedList.size(); i++) {
+                    joinedString += cleanedList[i];
+                    if (i < cleanedList.size() - 1) {
+                        joinedString += ';';
+                    }
+                }
 
                 // Assign the cleaned string back to the Account_Service__c field
                 acc.Account_Service__c = joinedString;
