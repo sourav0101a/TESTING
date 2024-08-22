@@ -1,73 +1,76 @@
-<aura:component implements="force:appHostable,flexipage:availableForAllPageTypes,flexipage:availableForRecordHome,force:hasRecordId,forceCommunity:availableForAllPageTypes,force:lightningQuickActionWithoutHeader" access="global" >
-<aura:attribute name="showConfirmDialogBox" type="boolean" default="false"/>
-    <aura:if isTrue="{!v.showConfirmDialogBox}">
-    <div style="padding-top: 15% !important;" class="slds-align_absolute-center">
-        
-    <p>Case creation in progress</p>
-    <lightning:button name="Cancel" label="No" onclick="{!c.handleConfirmDialogCancel}"/>
-</div>
-    </aura:if>
+import { api, LightningElement } from 'lwc';
+import { getRecordNotifyChange } from 'lightning/uiRecordApi';
+import newCase from '@salesforce/apex/SC_CommonLEX.newCase';
+import LightningAlert from 'lightning/alert';
+import { NavigationMixin } from 'lightning/navigation';
+export default class Scnewcase extends LightningElement {
+	@api resType;
+	@api resMsg;
+    @api
+    newCaseContact(contactId){
+		console.log('value of contactId'+contactId);
+        getRecordNotifyChange([{recordId:contactId}]);
+        console.log('calling apex class');
+        newCase({conId:contactId})
+        .then(result => {
+			let conts = result;
+            let indexVal = conts.indexOf(",");
+            console.log('value of conts'+conts);
+            console.log('value of indexval'+indexVal);
+            this.resType = conts.slice(0,indexVal);
+            this.resMsg = conts.slice(indexVal+1);
+            console.log('vlaue of restype'+this.resType);
+            console.log('value of resmsg'+this.resMsg);
+            if(this.conts){
+                console.log('value of resmsg navigateToRecordPage'+this.conts);
+                this.navigateToRecordPage(this.resMsg)
+            }
+			if(this.resType == "alert"){
+                LightningAlert.open({
+                    message: this.resMsg,
+                    theme: 'error', // a red theme intended for error states
+                    label: 'Error!', // this is the header text
+                }).then(() => {
+                    console.log('Inside alert event');
+                    const closeCaseModal = new CustomEvent('alerteventcase',{
+                        detail:{
+                            name:'closeCaseModal'
+                        }
+                    });
+                    this.dispatchEvent(closeCaseModal);
+                    console.log('event dispatached for alertevent');
+                });
+            }
+            else if(this.resType == 'URL'){
+                console.log('Entered else');
+                const caseEvent = new CustomEvent('createcaseevents',{
+                    detail:{
+                        urlToOpen: this.resMsg,
+                        name:'OpenPage'
+                    }
+                });
+                console.log('value of caseEvent'+caseEvent);
+                this.dispatchEvent(caseEvent);
+                console.log('Event dispatched');
+            }
+            else{
+                console.log('Error during case creation');
+            }
+		})
+		.catch(error => {
+            console.log('>>>>>>>>>>>>3' + error);
+        });	
+	}
+    navigateToRecordPage(resMsg){
+        console.log('>>>>>>>>>>>>3 caseID' + resMsg);
+        this[NavigationMixin.Navigate]({
 
-<lightning:workspaceAPI aura:id="workspace" />
-<lightning:navigation aura:id="navService"/>
-<c:scnewcase aura:id="ncase" onalerteventmodal="{!c.closeModal}" onalertrefreshmodal="{!c.refreshTab}" />
-<aura:handler name="init" value="{!this}" action="{!c.init}"/>
-<!-- <aura:handler name="render" value="{!this}" action="{!c.createCaseCall}"/> -->
-<div aura:id="toggleDiv">
-        <aura:if isTrue="{!v.showConfirmDialogBox}">
-            <div style="padding-top: 15% !important;" class="slds-align_absolute-center">
-                <b>Case Re-Open is in progress</b>
-            </div>
-            
-            <aura:set attribute="else">
-                <div class="slds-align_absolute-center slds-modal__content slds-p-around--medium" style="padding-top: 10% !important;">
-                    <b>Are you sure you want to Re-Open Case?</b>
-                </div>
-                <div style="padding-left: 40% !important; padding-top: 15% !important;">
-                    <lightning:button name="Cancel" label="No" onclick="{!c.handleConfirmDialogCancel}"/>
-                    <lightning:button variant="brand" name="Ok" label="Yes" onclick="{!c.handleConfirmDialogOk}"/>
-                </div>
-            </aura:set>
-        </aura:if>
-        
-    </div>
-</aura:component>
-({//NOSONAR
-	init : function(component, event, helper) {
-        
-        component.set('v.showConfirmDialogBox', false);
-    },
-    handleConfirmDialogOk : function(component, event, helper) {
-        console.log("entered aura controller 148778");
-        var recId= component.get("v.recordId");
-        console.log('value of recId'+recId);
-        var lwcRef = component.find("ncase");
-        lwcRef.newCaseContact(recId);
-        $A.util.addClass(component.find("toggleDiv"), "slds-hide");
-        component.set('v.showConfirmDialogBox', true);
-    },
-    closeModal : function(component,event){
-        console.log('entered alert event');
-        $A.get("e.force:closeQuickAction").fire();
-    },
-    refreshTab : function(component,event){
-        console.log('Entered Aura Event refresh');
-        $A.get("e.force:closeQuickAction").fire();
-        var workspaceAPI = component.find("workspace");
-        workspaceAPI.getFocusedTabInfo().then(function(response) {
-            var focusedTabId = response.tabId;
-            workspaceAPI.refreshTab({
-                tabId: focusedTabId,
-                includeAllSubtabs: false
-            });
+            type: 'standard__recordPage',
+            attributes: {
+                recordId: this.resMsg,
+                objectApiName: 'Case',
+                actionName: 'view'
+            }
         })
-        .catch(function(error) {
-            console.log(error);
-        });
-    },
-    
-    handleConfirmDialogCancel : function(component, event, helper) {
-        component.set('v.showConfirmDialogBox', false);
-        $A.get("e.force:closeQuickAction").fire();
-    }    
-})
+    }
+}
