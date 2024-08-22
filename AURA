@@ -1,9 +1,11 @@
 public class PicklistHelper {
     @InvocableMethod
     public static void removeDuplicates(List<Id> accountIds) {
-    //public static void removeDuplicates(Id accountIds) {    
         List<Account> accounts = [SELECT Id, NOM_Customer_Group__c FROM Account WHERE Id IN :accountIds];
-        System.debug('accounts value is 148778:' +accounts);
+        System.debug('accounts value is 148778:' + accounts);
+
+        List<Account> accountsToUpdate = new List<Account>();
+
         for (Account acc : accounts) {
             if (acc.NOM_Customer_Group__c != null) {
                 // Split the multi-select picklist values into a list
@@ -12,8 +14,9 @@ public class PicklistHelper {
                 // Remove duplicates by converting the list to a Set and then back to a List
                 Set<String> uniqueValues = new Set<String>(valuesList);
                 List<String> cleanedList = new List<String>(uniqueValues);
-                System.debug('uniqueValues value is 148778:' +uniqueValues);
-                System.debug('cleanedList value is 148778:' +cleanedList);
+                System.debug('uniqueValues value is 148778:' + uniqueValues);
+                System.debug('cleanedList value is 148778:' + cleanedList);
+
                 // Manually join the cleaned list into a single string with semicolon delimiter
                 String joinedString = '';
                 for (Integer i = 0; i < cleanedList.size(); i++) {
@@ -22,11 +25,18 @@ public class PicklistHelper {
                         joinedString += ';';
                     }
                 }
-                System.debug('joinedString value is 148778:' +joinedString);
-                // Assign the cleaned string back to the Account_Service__c field
-                acc.NOM_Customer_Group__c = joinedString;
+                System.debug('joinedString value is 148778:' + joinedString);
+
+                // Assign the cleaned string back to the NOM_Customer_Group__c field
+                if (acc.NOM_Customer_Group__c != joinedString) {
+                    acc.NOM_Customer_Group__c = joinedString;
+                    accountsToUpdate.add(acc); // Add to the update list only if there is a change
+                }
             }
         }
-        update accounts;
+        
+        if (!accountsToUpdate.isEmpty()) {
+            update accountsToUpdate;
+        }
     }
 }
