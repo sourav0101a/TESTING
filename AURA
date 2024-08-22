@@ -1,42 +1,73 @@
-public class PicklistHelper {
-    @InvocableMethod
-    public static void removeDuplicates(List<Id> accountIds) {
-        List<Account> accounts = [SELECT Id, NOM_Customer_Group__c FROM Account WHERE Id IN :accountIds];
-        for (Account acc : accounts) {
-            if (acc.Account_Service__c != null) {
-                // Split the multi-select picklist values into a list
-                List<String> valuesList = new List<String>(acc.Account_Service__c.split(';'));
+<aura:component implements="force:appHostable,flexipage:availableForAllPageTypes,flexipage:availableForRecordHome,force:hasRecordId,forceCommunity:availableForAllPageTypes,force:lightningQuickActionWithoutHeader" access="global" >
+<aura:attribute name="showConfirmDialogBox" type="boolean" default="false"/>
+    <aura:if isTrue="{!v.showConfirmDialogBox}">
+    <div style="padding-top: 15% !important;" class="slds-align_absolute-center">
+        
+    <p>Case creation in progress</p>
+    <lightning:button name="Cancel" label="No" onclick="{!c.handleConfirmDialogCancel}"/>
+</div>
+    </aura:if>
 
-                // Remove duplicates by converting the list to a Set and then back to a List
-                Set<String> uniqueValues = new Set<String>(valuesList);
-                List<String> cleanedList = new List<String>(uniqueValues);
-
-                // Manually join the cleaned list into a single string with semicolon delimiter
-                String joinedString = '';
-                for (Integer i = 0; i < cleanedList.size(); i++) {
-                    joinedString += cleanedList[i];
-                    if (i < cleanedList.size() - 1) {
-                        joinedString += ';';
-                    }
-                }
-
-                // Assign the cleaned string back to the Account_Service__c field
-                acc.Account_Service__c = joinedString;
-            }
-        }
-        update accounts;
-    }
-}
-
-// Create a new Account record with duplicate values in the multi-select picklist field
-Account testAccount = new Account(
-    Name = 'Test Account with Duplicates',
-    Account_Service__c = 'Service1;Service2;Service1;Service3;Service2'
-);
-
-// Insert the record
-insert testAccount;
-
-// Optional: Retrieve and output the record to verify
-Account insertedAccount = [SELECT Id, Name, Account_Service__c FROM Account WHERE Id = :testAccount.Id];
-System.debug('Inserted Account Service Field: ' + insertedAccount.Account_Service__c);
+<lightning:workspaceAPI aura:id="workspace" />
+<lightning:navigation aura:id="navService"/>
+<c:scnewcase aura:id="ncase" onalerteventmodal="{!c.closeModal}" onalertrefreshmodal="{!c.refreshTab}" />
+<aura:handler name="init" value="{!this}" action="{!c.init}"/>
+<!-- <aura:handler name="render" value="{!this}" action="{!c.createCaseCall}"/> -->
+<div aura:id="toggleDiv">
+        <aura:if isTrue="{!v.showConfirmDialogBox}">
+            <div style="padding-top: 15% !important;" class="slds-align_absolute-center">
+                <b>Case Re-Open is in progress</b>
+            </div>
+            
+            <aura:set attribute="else">
+                <div class="slds-align_absolute-center slds-modal__content slds-p-around--medium" style="padding-top: 10% !important;">
+                    <b>Are you sure you want to Re-Open Case?</b>
+                </div>
+                <div style="padding-left: 40% !important; padding-top: 15% !important;">
+                    <lightning:button name="Cancel" label="No" onclick="{!c.handleConfirmDialogCancel}"/>
+                    <lightning:button variant="brand" name="Ok" label="Yes" onclick="{!c.handleConfirmDialogOk}"/>
+                </div>
+            </aura:set>
+        </aura:if>
+        
+    </div>
+</aura:component>
+({//NOSONAR
+	init : function(component, event, helper) {
+        
+        component.set('v.showConfirmDialogBox', false);
+    },
+    handleConfirmDialogOk : function(component, event, helper) {
+        console.log("entered aura controller 148778");
+        var recId= component.get("v.recordId");
+        console.log('value of recId'+recId);
+        var lwcRef = component.find("ncase");
+        lwcRef.newCaseContact(recId);
+        $A.util.addClass(component.find("toggleDiv"), "slds-hide");
+        component.set('v.showConfirmDialogBox', true);
+    },
+    closeModal : function(component,event){
+        console.log('entered alert event');
+        $A.get("e.force:closeQuickAction").fire();
+    },
+    refreshTab : function(component,event){
+        console.log('Entered Aura Event refresh');
+        $A.get("e.force:closeQuickAction").fire();
+        var workspaceAPI = component.find("workspace");
+        workspaceAPI.getFocusedTabInfo().then(function(response) {
+            var focusedTabId = response.tabId;
+            workspaceAPI.refreshTab({
+                tabId: focusedTabId,
+                includeAllSubtabs: false
+            });
+        })
+        .catch(function(error) {
+            console.log(error);
+        });
+    },
+    
+    handleConfirmDialogCancel : function(component, event, helper) {
+        component.set('v.showConfirmDialogBox', false);
+        $A.get("e.force:closeQuickAction").fire();
+    }    
+})
