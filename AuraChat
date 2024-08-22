@@ -1,96 +1,56 @@
-<aura:component implements="force:appHostable,flexipage:availableForAllPageTypes,flexipage:availableForRecordHome,force:hasRecordId,forceCommunity:availableForAllPageTypes,force:lightningQuickActionWithoutHeader" access="global">
+public class PicklistHelper {
+    // Static variable to control recursion
+    private static Boolean isProcessing = false;
     
-    <lightning:workspaceAPI aura:id="workspace" />
-    <lightning:navigation aura:id="navService"/>
-
-    <!-- Custom component -->
-    <c:scnewcase aura:id="ncase" onalerteventcase="{!c.closeModal}" oncreatecaseevents="{!c.openCaseEdit}" />
-
-    <!-- Confirmation Modal -->
-    <aura:if isTrue="{!v.showConfirmation}">
-        <div class="slds-modal slds-fade-in-open">
-            <div class="slds-modal__container">
-                <header class="slds-modal__header">
-                    <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse" title="Close" onclick="{!c.handleClose}">
-                        <lightning:icon iconName="utility:close" alternativeText="close" size="small"/>
-                        <span class="slds-assistive-text">Close</span>
-                    </button>
-                    <h2 class="slds-text-heading_medium">Confirm</h2>
-                </header>
-                <div class="slds-modal__body">
-                    <p>Are you sure you want to create a case?</p>
-                </div>
-                <footer class="slds-modal__footer">
-                    <lightning:button variant="neutral" label="No" onclick="{!c.handleNo}" />
-                    <lightning:button variant="brand" label="Yes" onclick="{!c.handleYes}" />
-                </footer>
-            </div>
-        </div>
-        <div class="slds-backdrop slds-backdrop_open"></div>
-    </aura:if>
-
-    <aura:handler name="init" value="{!this}" action="{!c.init}"/>
-</aura:component>
-
-({
-    init : function(component, event, helper) {
-        // Initialize component attributes
-        component.set("v.showConfirmation", false);
-    },
-
-    createCaseCall : function(component, event, helper) {
-        console.log("entered aura controller");
-        
-        // Check if confirmation is already shown
-        if (!component.get("v.showConfirmation")) {
-            component.set("v.showConfirmation", true);
+    @InvocableMethod
+    public static void removeDuplicates(List<Id> accountIds) {
+        if (isProcessing) {
+            // Avoid recursion
+            return;
         }
-    },
+        isProcessing = true;
+        
+        try {
+            List<Account> accounts = [SELECT Id, NOM_Customer_Group__c FROM Account WHERE Id IN :accountIds];
+            System.debug('accounts value is 148778:' + accounts);
 
-    handleClose : function(component, event, helper) {
-        // Close the modal
-        component.set("v.showConfirmation", false);
-    },
+            List<Account> accountsToUpdate = new List<Account>();
 
-    handleNo : function(component, event, helper) {
-        // User clicked "No", so close the modal
-        component.set("v.showConfirmation", false);
-    },
+            for (Account acc : accounts) {
+                if (acc.NOM_Customer_Group__c != null) {
+                    // Split the multi-select picklist values into a list
+                    List<String> valuesList = new List<String>(acc.NOM_Customer_Group__c.split(';'));
 
-    handleYes : function(component, event, helper) {
-        // User clicked "Yes", so proceed with creating the case
-        component.set("v.showConfirmation", false);
+                    // Remove duplicates by converting the list to a Set and then back to a List
+                    Set<String> uniqueValues = new Set<String>(valuesList);
+                    List<String> cleanedList = new List<String>(uniqueValues);
+                    System.debug('uniqueValues value is 148778:' + uniqueValues);
+                    System.debug('cleanedList value is 148778:' + cleanedList);
 
-        // Call the create case logic after confirmation
-        var recId = component.get("v.recordId");
-        var lwcRef = component.find("ncase");
-        lwcRef.newCaseContact(recId);
-    },
+                    // Manually join the cleaned list into a single string with semicolon delimiter
+                    String joinedString = '';
+                    for (Integer i = 0; i < cleanedList.size(); i++) {
+                        joinedString += cleanedList[i];
+                        if (i < cleanedList.size() - 1) {
+                            joinedString += ';';
+                        }
+                    }
+                    System.debug('joinedString value is 148778:' + joinedString);
 
-    closeModal : function(component, event) {
-        console.log('entered alert event');
-        $A.get("e.force:closeQuickAction").fire();
-    },
-
-    openCaseEdit : function(component, event) {
-        console.log('Entered Aura Event');
-        console.log('Value of params: ' + event);
-        var workspaceAPI = component.find("workspace");
-        var subTabURL = event.getParam('urlToOpen');
-        console.log('value of subTabURL: ' + subTabURL);
-        var parentTab;
-        workspaceAPI.getEnclosingTabId().then(function(tabId) {
-            console.log(tabId);
-            parentTab = tabId;
-        })
-        .catch(function(error) {
-            console.log(error);
-        });
-        workspaceAPI.openSubtab({
-                parentTabId: parentTab,
-                recordId: subTabURL,
-                focus: true,
-        });
-        $A.get("e.force:closeQuickAction").fire(); 
+                    // Assign the cleaned string back to the NOM_Customer_Group__c field
+                    if (acc.NOM_Customer_Group__c != joinedString) {
+                        acc.NOM_Customer_Group__c = joinedString;
+                        accountsToUpdate.add(acc); // Add to the update list only if there is a change
+                    }
+                }
+            }
+            
+            if (!accountsToUpdate.isEmpty()) {
+                update accountsToUpdate;
+            }
+        } finally {
+            // Reset the flag to allow future invocations
+            isProcessing = false;
+        }
     }
-})
+}
