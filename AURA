@@ -2,30 +2,37 @@ public class PicklistHelper {
 
     // Method to handle the removal of duplicates in NOM_Customer_Group__c field
     public static void removeDuplicatePicklistValues(List<Account> accounts) {
-        // Loop through each Account record
-        for (Account acc : accounts) {
-            if (acc.NOM_Customer_Group__c != null) {
-                // Check field-level security before updating the field
-                if (Schema.sObjectType.Account.fields.NOM_Customer_Group__c.isAccessible()) {
-                    // Split the multi-select picklist values into a list
-                    List<String> valuesList = new List<String>(acc.NOM_Customer_Group__c.split(';'));
+        // Check if the list is not empty
+        if (accounts != null && !accounts.isEmpty()) {
+            // Loop through each Account record
+            for (Account acc : accounts) {
+                if (acc.NOM_Customer_Group__c != null) {
+                    // Check field-level security before updating the field
+                    if (Schema.sObjectType.Account.fields.NOM_Customer_Group__c.isAccessible()) {
+                        // Split the multi-select picklist values into a list
+                        List<String> valuesList = new List<String>(acc.NOM_Customer_Group__c.split(';'));
 
-                    // Remove duplicates by converting the list to a Set and then back to a List
-                    Set<String> uniqueValues = new Set<String>(valuesList);
-                    List<String> cleanedList = new List<String>(uniqueValues);
+                        // Remove duplicates by converting the list to a Set and then back to a List
+                        Set<String> uniqueValues = new Set<String>(valuesList);
+                        List<String> cleanedList = new List<String>(uniqueValues);
 
-                    // Manually join the cleaned list into a single string with semicolon delimiter
-                    String joinedString = String.join(cleanedList, ';');
+                        // Join the cleaned list into a single string with semicolon delimiter
+                        String joinedString = String.join(cleanedList, ';');
 
-                    // Assign the cleaned string back to the NOM_Customer_Group__c field
-                    acc.NOM_Customer_Group__c = joinedString;
-                } else {
-                    System.debug('No access to field NOM_Customer_Group__c for Account ID: ' + acc.Id);
+                        // Assign the cleaned string back to the NOM_Customer_Group__c field
+                        acc.NOM_Customer_Group__c = joinedString;
+                    } else {
+                        System.debug('No access to field NOM_Customer_Group__c for Account ID: ' + acc.Id);
+                    }
                 }
             }
+
+            // Perform the update operation to save changes
+            update accounts;
         }
     }
 }
+
 trigger AccountTrigger on Account (before insert, before update) {
     if (Trigger.isBefore) {
         if (Trigger.isInsert || Trigger.isUpdate) {
