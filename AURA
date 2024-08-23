@@ -32,11 +32,5 @@ public class PicklistHelper {
         }
     }
 }
-
-trigger AccountTrigger on Account (before insert, before update) {
-    if (Trigger.isBefore) {
-        if (Trigger.isInsert || Trigger.isUpdate) {
-            PicklistHelper.removeDuplicatePicklistValues(Trigger.new);
-        }
-    }
-}
+PicklistHelper.removeDuplicatePicklistValues(newAccItems);
+[object Object]: MasterAccountTrigger: execution of AfterUpdate caused by: System.FinalException: Record is read-only Class.PicklistHelper.removeDuplicatePicklistValues: line 23, column 1 Class.AccountTriggerHandler.AfterUpdate: line 92, column 1 Class.TriggerDispatcher.Run: line 41, column 1 Trigger.MasterAccountTrigger: line 16, column 1
