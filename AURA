@@ -1,32 +1,35 @@
 public class PicklistHelper {
-    @InvocableMethod
-    public static void removeDuplicates(List<Id> accountIds) {
-    //public static void removeDuplicates(Id accountIds) {    
-        List<Account> accounts = [SELECT Id, NOM_Customer_Group__c FROM Account WHERE Id IN :accountIds];
-        System.debug('accounts value is 148778:' +accounts);
+
+    // Method to handle the removal of duplicates in NOM_Customer_Group__c field
+    public static void removeDuplicatePicklistValues(List<Account> accounts) {
+        // Loop through each Account record
         for (Account acc : accounts) {
             if (acc.NOM_Customer_Group__c != null) {
-                // Split the multi-select picklist values into a list
-                List<String> valuesList = new List<String>(acc.NOM_Customer_Group__c.split(';'));
+                // Check field-level security before updating the field
+                if (Schema.sObjectType.Account.fields.NOM_Customer_Group__c.isAccessible()) {
+                    // Split the multi-select picklist values into a list
+                    List<String> valuesList = new List<String>(acc.NOM_Customer_Group__c.split(';'));
 
-                // Remove duplicates by converting the list to a Set and then back to a List
-                Set<String> uniqueValues = new Set<String>(valuesList);
-                List<String> cleanedList = new List<String>(uniqueValues);
-                System.debug('uniqueValues value is 148778:' +uniqueValues);
-                System.debug('cleanedList value is 148778:' +cleanedList);
-                // Manually join the cleaned list into a single string with semicolon delimiter
-                String joinedString = '';
-                for (Integer i = 0; i < cleanedList.size(); i++) {
-                    joinedString += cleanedList[i];
-                    if (i < cleanedList.size() - 1) {
-                        joinedString += ';';
-                    }
+                    // Remove duplicates by converting the list to a Set and then back to a List
+                    Set<String> uniqueValues = new Set<String>(valuesList);
+                    List<String> cleanedList = new List<String>(uniqueValues);
+
+                    // Manually join the cleaned list into a single string with semicolon delimiter
+                    String joinedString = String.join(cleanedList, ';');
+
+                    // Assign the cleaned string back to the NOM_Customer_Group__c field
+                    acc.NOM_Customer_Group__c = joinedString;
+                } else {
+                    System.debug('No access to field NOM_Customer_Group__c for Account ID: ' + acc.Id);
                 }
-                System.debug('joinedString value is 148778:' +joinedString);
-                // Assign the cleaned string back to the Account_Service__c field
-                acc.NOM_Customer_Group__c = joinedString;
             }
         }
-        update accounts;
+    }
+}
+trigger AccountTrigger on Account (before insert, before update) {
+    if (Trigger.isBefore) {
+        if (Trigger.isInsert || Trigger.isUpdate) {
+            PicklistHelper.removeDuplicatePicklistValues(Trigger.new);
+        }
     }
 }
