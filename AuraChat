@@ -38,3 +38,36 @@
         $A.get("e.force:closeQuickAction").fire();
     }    
 })
+
+<aura:component implements="force:appHostable,flexipage:availableForAllPageTypes,flexipage:availableForRecordHome,force:hasRecordId,forceCommunity:availableForAllPageTypes,force:lightningQuickActionWithoutHeader" access="global" >
+<aura:attribute name="showConfirmDialogBox" type="boolean" default="false"/>
+    
+
+<lightning:workspaceAPI aura:id="workspace" />
+<lightning:navigation aura:id="navService"/>
+<c:scnewcase aura:id="ncase" onalerteventmodal="{!c.closeModal}" onalertrefreshmodal="{!c.refreshTab}" />
+	
+    <aura:handler name="init" value="{!this}" action="{!c.init}"/>
+<!-- <aura:handler name="render" value="{!this}" action="{!c.createCaseCall}"/> -->
+<div aura:id="toggleDiv">
+        <aura:if isTrue="{!v.showConfirmDialogBox}">
+            <div style="padding-top: 15% !important;" class="slds-align_absolute-center">
+                <b>Case creation is in progress</b>
+            </div>
+            
+            <aura:set attribute="else">
+                <div class="slds-align_absolute-center slds-modal__content slds-p-around--medium" style="padding-top: 10% !important;">
+                    <b>Are you sure you want to Re-Open Case?</b>
+                </div>
+                <div style="padding-left: 40% !important; padding-top: 15% !important;">
+                    <lightning:button name="Cancel" label="No" onclick="{!c.handleConfirmDialogCancel}"/>
+                    <lightning:button variant="brand" name="Ok" label="Yes" onclick="{!c.handleConfirmDialogOk}"/>
+                </div>
+            </aura:set>
+        </aura:if>
+        
+    </div>
+    <aura:if isTrue="{!v.showMessage}">
+        <aura:handler name="render" value="{!this}" action="{!c.handleConfirmDialogCancel}"/>
+        </aura:if>
+</aura:component>
