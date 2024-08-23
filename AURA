@@ -1,60 +1,32 @@
-import { api, LightningElement } from 'lwc';
-import newCase from '@salesforce/apex/SC_CommonLEX.newCase';
-import LightningAlert from 'lightning/alert';
-import { NavigationMixin } from 'lightning/navigation';
+public class PicklistHelper {
+    @InvocableMethod
+    public static void removeDuplicates(List<Id> accountIds) {
+    //public static void removeDuplicates(Id accountIds) {    
+        List<Account> accounts = [SELECT Id, NOM_Customer_Group__c FROM Account WHERE Id IN :accountIds];
+        System.debug('accounts value is 148778:' +accounts);
+        for (Account acc : accounts) {
+            if (acc.NOM_Customer_Group__c != null) {
+                // Split the multi-select picklist values into a list
+                List<String> valuesList = new List<String>(acc.NOM_Customer_Group__c.split(';'));
 
-export default class Scnewcase extends NavigationMixin(LightningElement) {
-    @api resType;
-    @api resMsg;
-
-    @api
-    newCaseContact(contactId) {
-        console.log('value of contactId: ' + contactId);
-        
-        newCase({ conId: contactId })
-            .then(result => {
-                let conts = result;
-                let indexVal = conts.indexOf(",");
-                this.resType = conts.slice(0, indexVal);
-                this.resMsg = conts.slice(indexVal + 1);
-
-                if (this.resType === 'URL') {
-                    this.navigateToRecordPage(this.resMsg);
-                } else if (this.resType === "alert") {
-                    LightningAlert.open({
-                        message: this.resMsg,
-                        theme: 'error',
-                        label: 'Error!',
-                    }).then(() => {
-                        this.dispatchEvent(new CustomEvent('alertmodalclose'));
-                    });
-                } else if (this.resType === 'URL') {
-                    this.dispatchEvent(new CustomEvent('createcaseevents', {
-                        detail: {
-                            urlToOpen: this.resMsg,
-                            name: 'OpenPage'
-                        }
-                    }));
-                } else {
-                    console.log('Error during case creation');
+                // Remove duplicates by converting the list to a Set and then back to a List
+                Set<String> uniqueValues = new Set<String>(valuesList);
+                List<String> cleanedList = new List<String>(uniqueValues);
+                System.debug('uniqueValues value is 148778:' +uniqueValues);
+                System.debug('cleanedList value is 148778:' +cleanedList);
+                // Manually join the cleaned list into a single string with semicolon delimiter
+                String joinedString = '';
+                for (Integer i = 0; i < cleanedList.size(); i++) {
+                    joinedString += cleanedList[i];
+                    if (i < cleanedList.size() - 1) {
+                        joinedString += ';';
+                    }
                 }
-            })
-            .catch(error => {
-                console.log('Error: ' + error);
-            });
-    }
-
-    navigateToRecordPage(caseId) {
-        this[NavigationMixin.Navigate]({
-            type: 'standard__recordPage',
-            attributes: {
-                recordId: caseId,
-                objectApiName: 'Case',
-                actionName: 'view'
+                System.debug('joinedString value is 148778:' +joinedString);
+                // Assign the cleaned string back to the Account_Service__c field
+                acc.NOM_Customer_Group__c = joinedString;
             }
-        }).then(() => {
-            // Ensure event is dispatched after navigation
-            this.dispatchEvent(new CustomEvent('alertmodalclose'));
-        });
+        }
+        update accounts;
     }
 }
