@@ -3,11 +3,10 @@
 
     <lightning:workspaceAPI aura:id="workspace" />
     <lightning:navigation aura:id="navService"/>
-    <c:scnewcase aura:id="ncase" onalerteventmodal="{!c.closeModal}" onalertrefreshmodal="{!c.refreshTab}" onalertmodalclose="{!c.handleModalClose}"/>
+    <c:scnewcase aura:id="ncase" onalertmodalclose="{!c.handleModalClose}"/>
 
     <aura:handler name="init" value="{!this}" action="{!c.init}"/>
-    <aura:handler event="c:alertmodalclose" action="{!c.handleModalClose}"/>
-
+    
     <div aura:id="toggleDiv">
         <aura:if isTrue="{!v.showConfirmDialogBox}">
             <div style="padding-top: 15% !important;" class="slds-align_absolute-center">
