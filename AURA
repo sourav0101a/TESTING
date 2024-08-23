@@ -15,17 +15,10 @@ export default class Scnewcase extends NavigationMixin(LightningElement) {
             .then(result => {
                 let conts = result;
                 let indexVal = conts.indexOf(",");
-                console.log('value of conts: ' + conts);
-                console.log('value of indexVal: ' + indexVal);
-
                 this.resType = conts.slice(0, indexVal);
                 this.resMsg = conts.slice(indexVal + 1);
 
-                console.log('value of resType: ' + this.resType);
-                console.log('value of resMsg: ' + this.resMsg);
-
                 if (this.resType === 'URL') {
-                    console.log('Entering URL condition');
                     this.navigateToRecordPage(this.resMsg);
                 } else if (this.resType === "alert") {
                     LightningAlert.open({
@@ -33,12 +26,9 @@ export default class Scnewcase extends NavigationMixin(LightningElement) {
                         theme: 'error',
                         label: 'Error!',
                     }).then(() => {
-                        console.log('Inside alert event');
                         this.dispatchEvent(new CustomEvent('alertmodalclose'));
-                        console.log('alertmodalclose event dispatched');
                     });
                 } else if (this.resType === 'URL') {
-                    console.log('Entered else for URL');
                     this.dispatchEvent(new CustomEvent('createcaseevents', {
                         detail: {
                             urlToOpen: this.resMsg,
@@ -55,7 +45,6 @@ export default class Scnewcase extends NavigationMixin(LightningElement) {
     }
 
     navigateToRecordPage(caseId) {
-        console.log('Navigating to record page with caseId: ' + caseId);
         this[NavigationMixin.Navigate]({
             type: 'standard__recordPage',
             attributes: {
@@ -63,86 +52,9 @@ export default class Scnewcase extends NavigationMixin(LightningElement) {
                 objectApiName: 'Case',
                 actionName: 'view'
             }
+        }).then(() => {
+            // Ensure event is dispatched after navigation
+            this.dispatchEvent(new CustomEvent('alertmodalclose'));
         });
-        
-        // Dispatch a custom event to notify Aura component to close the modal
-        this.dispatchEvent(new CustomEvent('alertmodalclose'));
     }
 }
-
-
-
-
-
-
-
-
-
-<aura:component implements="force:appHostable,flexipage:availableForAllPageTypes,flexipage:availableForRecordHome,force:hasRecordId,forceCommunity:availableForAllPageTypes,force:lightningQuickActionWithoutHeader" access="global">
-    <aura:attribute name="showConfirmDialogBox" type="boolean" default="false"/>
-    
-    <lightning:workspaceAPI aura:id="workspace" />
-    <lightning:navigation aura:id="navService"/>
-    <c:scnewcase aura:id="ncase" onalerteventmodal="{!c.closeModal}" onalertrefreshmodal="{!c.refreshTab}" onalertmodalclose="{!c.handleModalClose}" />
-    
-    <aura:handler name="init" value="{!this}" action="{!c.init}"/>
-    <aura:handler event="c:alertmodalclose" action="{!c.handleModalClose}"/>
-    
-    <div aura:id="toggleDiv">
-        <aura:if isTrue="{!v.showConfirmDialogBox}">
-            <div style="padding-top: 15% !important;" class="slds-align_absolute-center">
-                <b>Case creation is in progress</b>
-            </div>
-            
-            <aura:set attribute="else">
-                <div class="slds-align_absolute-center slds-modal__content slds-p-around--medium" style="padding-top: 10% !important;">
-                    <b>Are you sure you want to Re-Open Case?</b>
-                </div>
-                <div style="padding-left: 40% !important; padding-top: 15% !important;">
-                    <lightning:button name="Cancel" label="No" onclick="{!c.handleConfirmDialogCancel}"/>
-                    <lightning:button variant="brand" name="Ok" label="Yes" onclick="{!c.handleConfirmDialogOk}"/>
-                </div>
-            </aura:set>
-        </aura:if>
-    </div>
-</aura:component>
-
-({
-    init : function(component, event, helper) {
-        component.set('v.showConfirmDialogBox', false);
-    },
-    handleConfirmDialogOk : function(component, event, helper) {
-        console.log("entered aura controller handleConfirmDialogOk");
-        var recId = component.get("v.recordId");
-        console.log('value of recId: ' + recId);
-        var lwcRef = component.find("ncase");
-        lwcRef.newCaseContact(recId);
-    },
-    closeModal : function(component, event) {
-        console.log('entered alert event');
-        $A.get("e.force:closeQuickAction").fire();
-    },
-    refreshTab : function(component, event) {
-        console.log('Entered Aura Event refresh');
-        $A.get("e.force:closeQuickAction").fire();
-        var workspaceAPI = component.find("workspace");
-        workspaceAPI.getFocusedTabInfo().then(function(response) {
-            var focusedTabId = response.tabId;
-            workspaceAPI.refreshTab({
-                tabId: focusedTabId,
-                includeAllSubtabs: false
-            });
-        })
-        .catch(function(error) {
-            console.log(error);
-        });
-    },
-    handleConfirmDialogCancel : function(component, event, helper) {
-        component.set('v.showConfirmDialogBox', false);
-        $A.get("e.force:closeQuickAction").fire();
-    },
-    handleModalClose : function(component, event, helper) {
-        component.set('v.showConfirmDialogBox', false);
-        $A.get("e.force:closeQuickAction").fire();
-    }
-})
