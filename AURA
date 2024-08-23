@@ -1,42 +1,148 @@
-public class PicklistHelper {
-    @InvocableMethod
-    public static void removeDuplicates(List<Id> accountIds) {
-        List<Account> accounts = [SELECT Id, NOM_Customer_Group__c FROM Account WHERE Id IN :accountIds];
-        System.debug('accounts value is 148778:' + accounts);
+import { api, LightningElement } from 'lwc';
+import newCase from '@salesforce/apex/SC_CommonLEX.newCase';
+import LightningAlert from 'lightning/alert';
+import { NavigationMixin } from 'lightning/navigation';
 
-        List<Account> accountsToUpdate = new List<Account>();
+export default class Scnewcase extends NavigationMixin(LightningElement) {
+    @api resType;
+    @api resMsg;
 
-        for (Account acc : accounts) {
-            if (acc.NOM_Customer_Group__c != null) {
-                // Split the multi-select picklist values into a list
-                List<String> valuesList = new List<String>(acc.NOM_Customer_Group__c.split(';'));
-
-                // Remove duplicates by converting the list to a Set and then back to a List
-                Set<String> uniqueValues = new Set<String>(valuesList);
-                List<String> cleanedList = new List<String>(uniqueValues);
-                System.debug('uniqueValues value is 148778:' + uniqueValues);
-                System.debug('cleanedList value is 148778:' + cleanedList);
-
-                // Manually join the cleaned list into a single string with semicolon delimiter
-                String joinedString = '';
-                for (Integer i = 0; i < cleanedList.size(); i++) {
-                    joinedString += cleanedList[i];
-                    if (i < cleanedList.size() - 1) {
-                        joinedString += ';';
-                    }
-                }
-                System.debug('joinedString value is 148778:' + joinedString);
-
-                // Assign the cleaned string back to the NOM_Customer_Group__c field
-                if (acc.NOM_Customer_Group__c != joinedString) {
-                    acc.NOM_Customer_Group__c = joinedString;
-                    accountsToUpdate.add(acc); // Add to the update list only if there is a change
-                }
-            }
-        }
+    @api
+    newCaseContact(contactId) {
+        console.log('value of contactId: ' + contactId);
         
-        if (!accountsToUpdate.isEmpty()) {
-            update accountsToUpdate;
-        }
+        newCase({ conId: contactId })
+            .then(result => {
+                let conts = result;
+                let indexVal = conts.indexOf(",");
+                console.log('value of conts: ' + conts);
+                console.log('value of indexVal: ' + indexVal);
+
+                this.resType = conts.slice(0, indexVal);
+                this.resMsg = conts.slice(indexVal + 1);
+
+                console.log('value of resType: ' + this.resType);
+                console.log('value of resMsg: ' + this.resMsg);
+
+                if (this.resType === 'URL') {
+                    console.log('Entering URL condition');
+                    this.navigateToRecordPage(this.resMsg);
+                } else if (this.resType === "alert") {
+                    LightningAlert.open({
+                        message: this.resMsg,
+                        theme: 'error',
+                        label: 'Error!',
+                    }).then(() => {
+                        console.log('Inside alert event');
+                        this.dispatchEvent(new CustomEvent('alertmodalclose'));
+                        console.log('alertmodalclose event dispatched');
+                    });
+                } else if (this.resType === 'URL') {
+                    console.log('Entered else for URL');
+                    this.dispatchEvent(new CustomEvent('createcaseevents', {
+                        detail: {
+                            urlToOpen: this.resMsg,
+                            name: 'OpenPage'
+                        }
+                    }));
+                } else {
+                    console.log('Error during case creation');
+                }
+            })
+            .catch(error => {
+                console.log('Error: ' + error);
+            });
+    }
+
+    navigateToRecordPage(caseId) {
+        console.log('Navigating to record page with caseId: ' + caseId);
+        this[NavigationMixin.Navigate]({
+            type: 'standard__recordPage',
+            attributes: {
+                recordId: caseId,
+                objectApiName: 'Case',
+                actionName: 'view'
+            }
+        });
+        
+        // Dispatch a custom event to notify Aura component to close the modal
+        this.dispatchEvent(new CustomEvent('alertmodalclose'));
     }
 }
+
+
+
+
+
+
+
+
+
+<aura:component implements="force:appHostable,flexipage:availableForAllPageTypes,flexipage:availableForRecordHome,force:hasRecordId,forceCommunity:availableForAllPageTypes,force:lightningQuickActionWithoutHeader" access="global">
+    <aura:attribute name="showConfirmDialogBox" type="boolean" default="false"/>
+    
+    <lightning:workspaceAPI aura:id="workspace" />
+    <lightning:navigation aura:id="navService"/>
+    <c:scnewcase aura:id="ncase" onalerteventmodal="{!c.closeModal}" onalertrefreshmodal="{!c.refreshTab}" onalertmodalclose="{!c.handleModalClose}" />
+    
+    <aura:handler name="init" value="{!this}" action="{!c.init}"/>
+    <aura:handler event="c:alertmodalclose" action="{!c.handleModalClose}"/>
+    
+    <div aura:id="toggleDiv">
+        <aura:if isTrue="{!v.showConfirmDialogBox}">
+            <div style="padding-top: 15% !important;" class="slds-align_absolute-center">
+                <b>Case creation is in progress</b>
+            </div>
+            
+            <aura:set attribute="else">
+                <div class="slds-align_absolute-center slds-modal__content slds-p-around--medium" style="padding-top: 10% !important;">
+                    <b>Are you sure you want to Re-Open Case?</b>
+                </div>
+                <div style="padding-left: 40% !important; padding-top: 15% !important;">
+                    <lightning:button name="Cancel" label="No" onclick="{!c.handleConfirmDialogCancel}"/>
+                    <lightning:button variant="brand" name="Ok" label="Yes" onclick="{!c.handleConfirmDialogOk}"/>
+                </div>
+            </aura:set>
+        </aura:if>
+    </div>
+</aura:component>
+
+({
+    init : function(component, event, helper) {
+        component.set('v.showConfirmDialogBox', false);
+    },
+    handleConfirmDialogOk : function(component, event, helper) {
+        console.log("entered aura controller handleConfirmDialogOk");
+        var recId = component.get("v.recordId");
+        console.log('value of recId: ' + recId);
+        var lwcRef = component.find("ncase");
+        lwcRef.newCaseContact(recId);
+    },
+    closeModal : function(component, event) {
+        console.log('entered alert event');
+        $A.get("e.force:closeQuickAction").fire();
+    },
+    refreshTab : function(component, event) {
+        console.log('Entered Aura Event refresh');
+        $A.get("e.force:closeQuickAction").fire();
+        var workspaceAPI = component.find("workspace");
+        workspaceAPI.getFocusedTabInfo().then(function(response) {
+            var focusedTabId = response.tabId;
+            workspaceAPI.refreshTab({
+                tabId: focusedTabId,
+                includeAllSubtabs: false
+            });
+        })
+        .catch(function(error) {
+            console.log(error);
+        });
+    },
+    handleConfirmDialogCancel : function(component, event, helper) {
+        component.set('v.showConfirmDialogBox', false);
+        $A.get("e.force:closeQuickAction").fire();
+    },
+    handleModalClose : function(component, event, helper) {
+        component.set('v.showConfirmDialogBox', false);
+        $A.get("e.force:closeQuickAction").fire();
+    }
+})
