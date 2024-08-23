@@ -1,8 +1,6 @@
-In this issue we are having 2 severe challenge due to which it’s very difficult to provide the quick fix.
-The very most challenge here is,  we can’t recreate it in the lower environment, as there is no connection setup for account creation in lower org. We need to analyse the code through previously downloaded logs, which make it anonymous. 
+We are facing significant challenges with the lead conversion process due to a few critical issues:
+Environment Limitations: We are unable to replicate the issue in our lower environment due to the lack of account creation setup. As a result, we are limited to analyzing anonymized logs from previous attempts.
 
-Initially, I went through the code and the logs. I saw there were few processes, in the lead conversion, which were running recursively. I tried to stop this recursion, but stopping this extra trigger run impacted one of the  “quote expiration” functionality, which the testing team encountered in UAT. So we can’t stop the recursion of these trigger directly, as there are other processes which are dependent here. 
+Recursive Trigger Issues: We’ve observed recursive behavior in the lead conversion triggers, which is causing problems. While we tried to address this by stopping the recursion, it inadvertently affected the "quote expiration" functionality, as noted during UAT. Directly stopping these triggers isn’t a viable solution due to their dependencies with other processes.
 
-Since there is no setup in lower env, we need to promote our changes in UAT to understand the functionality by adding some debug logs.
-The other challenge here is test classes are not written properly. There are still a lot of  tech debt remaining, few of them I cleared which required for this lead conversion process, but still there are many left.
-Also, this class referred in multiple flows such as in genesis process, lead conversion processes, quote conversion processes and there are Ecomm processes too, due to which it’s test class become highly unstable to deploy, if any of the business logic fail.
+Testing and Debugging: Given the constraints of our lower environment, we need to enhance our debugging efforts in UAT. Additionally, the test classes associated with these processes are incomplete and unstable. Although we’ve resolved some of the technical debt related to lead conversion, significant issues remain. The test classes impact several processes, including Genesis, lead conversion, quote conversion, and Ecomm, making them delicate and challenging to deploy.
