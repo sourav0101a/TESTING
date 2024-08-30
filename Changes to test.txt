@@ -1,23 +1,27 @@
 <aura:component implements="force:appHostable,flexipage:availableForAllPageTypes,flexipage:availableForRecordHome,force:hasRecordId,forceCommunity:availableForAllPageTypes,force:lightningQuickActionWithoutHeader" access="global">
     <aura:attribute name="showConfirmDialogBox" type="boolean" default="false"/>
-    
+
     <lightning:workspaceAPI aura:id="workspace" />
     <lightning:navigation aura:id="navService"/>
     <c:scnewcase aura:id="ncase" onalerteventcase="{!c.closeModal}" oncreatecaseevents="{!c.openCaseEdit}" />
-    
+
     <aura:handler name="init" value="{!this}" action="{!c.init}"/>
 
-    <!-- Main dialog box -->
-    <div aura:id="toggleDiv" class="slds-align_absolute-center slds-modal__content slds-var-p-around_medium" style="padding-top: 10% !important; width: 30rem; text-align: center;">
+    <!-- Main dialog container -->
+    <div aura:id="toggleDiv" class="slds-modal__container slds-align_absolute-center" style="width: 30rem; padding-top: 5%;">
+        <!-- Conditional content -->
         <aura:if isTrue="{!v.showConfirmDialogBox}">
             <!-- Spinner and progress message -->
-            <lightning:spinner alternativeText="Loading" size="small" />
-            <p style="margin-top: 1rem;"><b>Case creation is in progress. You will be redirected to the Case record page.</b></p>
-            
+            <div class="slds-align_absolute-center">
+                <lightning:spinner alternativeText="Loading" size="small" />
+                <p style="margin-top: 1rem;"><b>Case creation is in progress. You will be redirected to the Case record page.</b></p>
+            </div>
             <aura:set attribute="else">
                 <!-- Confirmation message with Yes/No buttons -->
-                <p><b>Are you sure you want to open a Case?</b></p>
-                <div style="margin-top: 1rem;">
+                <div class="slds-align_absolute-center" style="padding-top: 1rem;">
+                    <b>Are you sure you want to open a Case?</b>
+                </div>
+                <div style="text-align: center; margin-top: 2rem;">
                     <lightning:button name="Cancel" label="No" onclick="{!c.handleConfirmDialogCancel}" class="slds-m-right_small"/>
                     <lightning:button variant="brand" name="Ok" label="Yes" onclick="{!c.handleConfirmDialogOk}"/>
                 </div>
