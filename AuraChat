@@ -1,68 +1,29 @@
-<aura:component implements="force:appHostable,flexipage:availableForAllPageTypes,flexipage:availableForRecordHome,force:hasRecordId,forceCommunity:availableForAllPageTypes,force:lightningQuickActionWithoutHeader" access="global">
-    <aura:attribute name="showConfirmDialogBox" type="boolean" default="false"/>
-
-    <lightning:workspaceAPI aura:id="workspace" />
-    <lightning:navigation aura:id="navService"/>
-    <c:scnewcase aura:id="ncase" onalertmodalclose="{!c.handleModalClose}"/>
-
-    <aura:handler name="init" value="{!this}" action="{!c.init}"/>
+<aura:component implements="force:appHostable,flexipage:availableForAllPageTypes,flexipage:availableForRecordHome,force:hasRecordId,forceCommunity:availableForAllPageTypes,force:lightningQuickActionWithoutHeader" access="global" >
+<aura:attribute name="showConfirmDialogBox" type="boolean" default="false"/>
     
+
+<lightning:workspaceAPI aura:id="workspace" />
+<lightning:navigation aura:id="navService"/>
+<c:scnewcase aura:id="ncase" onalerteventcase="{!c.closeModal}" oncreatecaseevents="{!c.openCaseEdit}" />
+	
+<aura:handler name="init" value="{!this}" action="{!c.init}"/>
     <div aura:id="toggleDiv">
         <aura:if isTrue="{!v.showConfirmDialogBox}">
-            <div style="padding-top: 15% !important;" class="slds-align_absolute-center">
-                <b>Case creation is in progress</b>
-            </div>
+                <div><lightning:spinner alternativeText="Loading" size="small" /></div>
+                <div style="padding-top: 15% !important;" class="slds-align_absolute-center">
+                    
+                    <b>Case creation is in progress.You will be re-directed to the Case record page.</b>
+                </div>
             
-            <aura:set attribute="else">
-                <div class="slds-align_absolute-center slds-modal__content slds-p-around--medium" style="padding-top: 10% !important;">
-                    <b>Are you sure you want to Re-Open Case?</b>
+        <aura:set attribute="else">
+                <div class="slds-align_absolute-center slds-modal__content slds-var-p-around_medium" style="padding-top: 10% !important;">
+                    <b>Are you sure you want to Open a Case?</b>
                 </div>
                 <div style="padding-left: 40% !important; padding-top: 15% !important;">
                     <lightning:button name="Cancel" label="No" onclick="{!c.handleConfirmDialogCancel}"/>
                     <lightning:button variant="brand" name="Ok" label="Yes" onclick="{!c.handleConfirmDialogOk}"/>
                 </div>
-            </aura:set>
+        </aura:set>
         </aura:if>
     </div>
 </aura:component>
-({
-    init : function(component, event, helper) {
-        component.set('v.showConfirmDialogBox', false);
-    },
-    handleConfirmDialogOk : function(component, event, helper) {
-        console.log("entered aura controller handleConfirmDialogOk");
-        var recId = component.get("v.recordId");
-        console.log('value of recId: ' + recId);
-        var lwcRef = component.find("ncase");
-
-        lwcRef.newCaseContact(recId);
-    },
-    closeModal : function(component, event) {
-        console.log('entered alert event');
-        $A.get("e.force:closeQuickAction").fire();
-    },
-    refreshTab : function(component, event) {
-        console.log('Entered Aura Event refresh');
-        $A.get("e.force:closeQuickAction").fire();
-        var workspaceAPI = component.find("workspace");
-        workspaceAPI.getFocusedTabInfo().then(function(response) {
-            var focusedTabId = response.tabId;
-            workspaceAPI.refreshTab({
-                tabId: focusedTabId,
-                includeAllSubtabs: false
-            });
-        })
-        .catch(function(error) {
-            console.log(error);
-        });
-    },
-    handleConfirmDialogCancel : function(component, event, helper) {
-        component.set('v.showConfirmDialogBox', false);
-        $A.get("e.force:closeQuickAction").fire();
-    },
-    handleModalClose : function(component, event, helper) {
-        console.log('Modal close event received');
-        component.set('v.showConfirmDialogBox', false);
-        $A.get("e.force:closeQuickAction").fire();
-    }
-})
