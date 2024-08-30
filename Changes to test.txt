@@ -14,15 +14,16 @@
             <!-- Spinner and progress message -->
             <div class="slds-align_absolute-center" style="text-align: center;">
                 <lightning:spinner alternativeText="Loading" size="small" />
-                <!-- Ensuring text is fully visible -->
-                <p style="margin-top: 1rem; font-weight: bold; color: #000; opacity: 1;">Case creation is in progress. You will be redirected to the Case record page.</p>
+                <!-- Space between spinner and text message -->
+                <p style="margin-top: 1.5rem; font-weight: bold; color: #000;">Case creation is in progress. You will be redirected to the Case record page.</p>
             </div>
             <aura:set attribute="else">
                 <!-- Confirmation message with Yes/No buttons -->
-                <div class="slds-align_absolute-center" style="padding-top: 1rem;">
+                <div class="slds-align_absolute-center" style="padding: 1.5rem 0; text-align: center;">
                     <b>Are you sure you want to open a Case?</b>
                 </div>
-                <div style="text-align: center; margin-top: 2rem;">
+                <!-- Adjusted button positioning -->
+                <div style="text-align: center; margin-top: 2.5rem;">
                     <lightning:button name="Cancel" label="No" onclick="{!c.handleConfirmDialogCancel}" class="slds-m-right_small"/>
                     <lightning:button variant="brand" name="Ok" label="Yes" onclick="{!c.handleConfirmDialogOk}"/>
                 </div>
