@@ -12,13 +12,15 @@
         <!-- Conditional content -->
         <aura:if isTrue="{!v.showConfirmDialogBox}">
             <!-- Spinner and progress message -->
-            <div class="slds-align_absolute-center" style="text-align: center; opacity: 1;"> <!-- Ensure full visibility -->
+            <div class="slds-align_absolute-center" style="text-align: center;">
                 <lightning:spinner alternativeText="Loading" size="small" />
-                <p style="margin-top: 1rem; font-weight: bold; color: #000;">Case creation is in progress. You will be redirected to the Case record page.</p>
+                <div class="slds-p-around_medium">
+                    <b>Case creation is in progress. You will be redirected to the Case record page.</b>
+                </div>
             </div>
             <aura:set attribute="else">
                 <!-- Confirmation message with Yes/No buttons -->
-                <div class="slds-align_absolute-center" style="padding-top: 1rem;">
+                <div class="slds-align_absolute-center slds-p-around_medium" style="padding-top: 1rem;">
                     <b>Are you sure you want to open a Case?</b>
                 </div>
                 <div style="text-align: center; margin-top: 2rem;">
