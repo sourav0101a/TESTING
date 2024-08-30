@@ -8,19 +8,19 @@
     <aura:handler name="init" value="{!this}" action="{!c.init}"/>
 
     <!-- Main dialog container with size adjustments -->
-    <div aura:id="toggleDiv" class="slds-modal__container slds-align_absolute-center" style="width: 20rem; max-height: 12rem; overflow: hidden; padding: 1rem; box-sizing: border-box;">
+    <div aura:id="toggleDiv" class="slds-modal__container slds-align_absolute-center" style="width: 18rem; max-height: 10rem; overflow: hidden; padding: 1rem; box-sizing: border-box;">
         <!-- Conditional content -->
         <aura:if isTrue="{!v.showConfirmDialogBox}">
             <!-- Spinner and progress message -->
-            <div class="slds-align_absolute-center" style="text-align: center;">
+            <div class="slds-align_absolute-center" style="text-align: center; line-height: 1.2;">
                 <lightning:spinner alternativeText="Loading" size="small" />
                 <!-- Space between spinner and text message -->
-                <p style="margin-top: 1rem; font-weight: bold; color: #000;">Case creation is in progress. You will be redirected to the Case record page.</p>
+                <p style="margin-top: 0.5rem; font-weight: bold; color: #000; font-size: 0.875rem;">Case creation is in progress. You will be redirected to the Case record page.</p>
             </div>
             <aura:set attribute="else">
                 <!-- Confirmation message with Yes/No buttons -->
-                <div class="slds-align_absolute-center" style="padding-top: 1rem; text-align: center;">
-                    <b>Are you sure you want to open a Case?</b>
+                <div class="slds-align_absolute-center" style="padding: 0.5rem 0; text-align: center; line-height: 1.2;">
+                    <b style="font-size: 0.875rem;">Are you sure you want to open a Case?</b>
                 </div>
                 <!-- Adjusted button positioning -->
                 <div style="text-align: center; margin-top: 1rem;">
