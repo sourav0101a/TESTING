@@ -7,8 +7,8 @@
 
     <aura:handler name="init" value="{!this}" action="{!c.init}"/>
 
-    <!-- Main dialog container -->
-    <div aura:id="toggleDiv" class="slds-modal__container slds-align_absolute-center" style="width: 30rem; padding-top: 5%;">
+    <!-- Main dialog container with adjusted size -->
+    <div aura:id="toggleDiv" class="slds-modal__container slds-align_absolute-center" style="width: 25rem; max-height: 15rem; overflow: hidden; padding-top: 5%;">
         <!-- Conditional content -->
         <aura:if isTrue="{!v.showConfirmDialogBox}">
             <!-- Spinner and progress message -->
@@ -23,7 +23,7 @@
                     <b>Are you sure you want to open a Case?</b>
                 </div>
                 <!-- Adjusted button positioning -->
-                <div style="text-align: center; margin-top: 2.5rem;">
+                <div style="text-align: center; margin-top: 2rem;">
                     <lightning:button name="Cancel" label="No" onclick="{!c.handleConfirmDialogCancel}" class="slds-m-right_small"/>
                     <lightning:button variant="brand" name="Ok" label="Yes" onclick="{!c.handleConfirmDialogOk}"/>
                 </div>
