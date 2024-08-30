@@ -1,11 +1,30 @@
-Rule Name: Validation_for_MainTechnicalContact
-        Description: Only the users with Account Team role of AM, CSM, IRM, IPS or Profile of System Administrator, CDM, Integration can create or edit a Main Technical Contact.
-Error condition formula: AND(NOT(ISPICKVAL($User.tfcrmTeamRole_c, 'CMFX - Account Manager')),NOT(ISPICKVAL($User.tfcrmTeamRolec, 'Direct Account Manager - Pooled')),NOT(ISPICKVAL($User.tfcrmTeamRolec, 'Direct Account Manager - Teamed')),NOT(ISPICKVAL($User.tfcrmTeamRolec, 'FR Account Manager')),NOT(ISPICKVAL($User.tfcrmTeamRolec, 'Global Account Manager')),NOT(ISPICKVAL($User.tfcrmTeamRolec, 'Media Account Manager')),NOT(ISPICKVAL($User.tfcrmTeamRolec, 'Strategic Account Manager')),NOT(ISPICKVAL($User.tfcrmTeamRolec, 'TR Account Manager')),NOT(ISPICKVAL($User.tfcrmTeamRolec, 'CSM Director')),NOT(ISPICKVAL($User.tfcrmTeamRolec, 'CSM-Enterprise')),NOT(ISPICKVAL($User.tfcrmTeamRolec, 'CSM-Investment and Advisory')),NOT(ISPICKVAL($User.tfcrmTeamRolec, 'CSM-Pricing and Reference Data')),NOT(ISPICKVAL($User.tfcrmTeamRolec, 'CSM-Real-Time Data')),NOT(ISPICKVAL($User.tfcrmTeamRolec, 'CSM-Risk')),NOT(ISPICKVAL($User.tfcrmTeamRolec, 'CSM Team Leader')),NOT(ISPICKVAL($User.tfcrmTeamRolec, 'CSM-Trading')),NOT(ISPICKVAL($User.tfcrmTeamRolec, 'CSM-Wealth')),NOT(ISPICKVAL($User.tfcrmTeamRolec, 'Implementation Project Specialist')),NOT(ISPICKVAL($User.tfcrmTeamRolec, 'Implementation Relationship Manager')),AND(($User.Profile_Name_Textc <> 'System Administrator'), ($User.Profile_Name_Textc <> 'CDM User'),($User.Profile_Name_Text_c <> 'Integration')))
-&&(OR(ISPICKVAL( Function__c , 'Main Technical Contact'),
- 
-ISPICKVAL ( PRIORVALUE (Function__c) , 'Main Technical Contact')
- 
-))
- 
-Error Message: Only Account Managers, Customer Success Managers, Implementation Project Specialists and Implementation Relationship Managers can Add or Edit a Main Technical Contact.
-Error Location: Contact
+<aura:component implements="force:appHostable,flexipage:availableForAllPageTypes,flexipage:availableForRecordHome,force:hasRecordId,forceCommunity:availableForAllPageTypes,force:lightningQuickActionWithoutHeader" access="global" >
+    <aura:attribute name="showConfirmDialogBox" type="boolean" default="false"/>
+    
+    <lightning:workspaceAPI aura:id="workspace" />
+    <lightning:navigation aura:id="navService"/>
+    <c:scnewcase aura:id="ncase" onalerteventcase="{!c.closeModal}" oncreatecaseevents="{!c.openCaseEdit}" />
+    
+    <aura:handler name="init" value="{!this}" action="{!c.init}"/>
+    
+    <div class="slds-modal slds-fade-in-open" aura:id="toggleDiv" role="dialog" style="width: 30rem;">
+        <div class="slds-modal__container">
+            <!-- Content in the modal -->
+            <div class="slds-modal__content slds-p-around_medium" style="text-align: center;">
+                <aura:if isTrue="{!v.showConfirmDialogBox}">
+                    <!-- Spinner with a message -->
+                    <lightning:spinner alternativeText="Loading" size="small" />
+                    <p style="margin-top: 1rem;"><b>Case creation is in progress. You will be redirected to the Case record page.</b></p>
+                <aura:set attribute="else">
+                    <!-- Confirmation message -->
+                    <p><b>Are you sure you want to open a Case?</b></p>
+                    <div class="slds-m-top_medium">
+                        <lightning:button name="Cancel" label="No" onclick="{!c.handleConfirmDialogCancel}" class="slds-m-right_small"/>
+                        <lightning:button variant="brand" name="Ok" label="Yes" onclick="{!c.handleConfirmDialogOk}"/>
+                    </div>
+                </aura:set>
+                </aura:if>
+            </div>
+        </div>
+    </div>
+</aura:component>
