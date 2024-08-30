@@ -1,4 +1,4 @@
-<aura:component implements="force:appHostable,flexipage:availableForAllPageTypes,flexipage:availableForRecordHome,force:hasRecordId,forceCommunity:availableForAllPageTypes,force:lightningQuickActionWithoutHeader" access="global" >
+<aura:component implements="force:appHostable,flexipage:availableForAllPageTypes,flexipage:availableForRecordHome,force:hasRecordId,forceCommunity:availableForAllPageTypes,force:lightningQuickActionWithoutHeader" access="global">
     <aura:attribute name="showConfirmDialogBox" type="boolean" default="false"/>
     
     <lightning:workspaceAPI aura:id="workspace" />
@@ -6,25 +6,22 @@
     <c:scnewcase aura:id="ncase" onalerteventcase="{!c.closeModal}" oncreatecaseevents="{!c.openCaseEdit}" />
     
     <aura:handler name="init" value="{!this}" action="{!c.init}"/>
-    
-    <div class="slds-modal slds-fade-in-open" aura:id="toggleDiv" role="dialog" style="width: 30rem;">
-        <div class="slds-modal__container">
-            <!-- Content in the modal -->
-            <div class="slds-modal__content slds-p-around_medium" style="text-align: center;">
-                <aura:if isTrue="{!v.showConfirmDialogBox}">
-                    <!-- Spinner with a message -->
-                    <lightning:spinner alternativeText="Loading" size="small" />
-                    <p style="margin-top: 1rem;"><b>Case creation is in progress. You will be redirected to the Case record page.</b></p>
-                <aura:set attribute="else">
-                    <!-- Confirmation message -->
-                    <p><b>Are you sure you want to open a Case?</b></p>
-                    <div class="slds-m-top_medium">
-                        <lightning:button name="Cancel" label="No" onclick="{!c.handleConfirmDialogCancel}" class="slds-m-right_small"/>
-                        <lightning:button variant="brand" name="Ok" label="Yes" onclick="{!c.handleConfirmDialogOk}"/>
-                    </div>
-                </aura:set>
-                </aura:if>
-            </div>
-        </div>
+
+    <!-- Main dialog box -->
+    <div aura:id="toggleDiv" class="slds-align_absolute-center slds-modal__content slds-var-p-around_medium" style="padding-top: 10% !important; width: 30rem; text-align: center;">
+        <aura:if isTrue="{!v.showConfirmDialogBox}">
+            <!-- Spinner and progress message -->
+            <lightning:spinner alternativeText="Loading" size="small" />
+            <p style="margin-top: 1rem;"><b>Case creation is in progress. You will be redirected to the Case record page.</b></p>
+            
+            <aura:set attribute="else">
+                <!-- Confirmation message with Yes/No buttons -->
+                <p><b>Are you sure you want to open a Case?</b></p>
+                <div style="margin-top: 1rem;">
+                    <lightning:button name="Cancel" label="No" onclick="{!c.handleConfirmDialogCancel}" class="slds-m-right_small"/>
+                    <lightning:button variant="brand" name="Ok" label="Yes" onclick="{!c.handleConfirmDialogOk}"/>
+                </div>
+            </aura:set>
+        </aura:if>
     </div>
 </aura:component>
